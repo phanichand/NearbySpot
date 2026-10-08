@@ -1,34 +1,33 @@
 package com.nearbyspot.presentation.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,15 +36,24 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.PopupProperties
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.libraries.places.api.model.AutocompletePrediction
 import com.google.android.libraries.places.api.model.AutocompleteSessionToken
 import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import com.google.android.libraries.places.api.net.PlacesClient
+import com.nearbyspot.R
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -57,6 +65,18 @@ data class DestinationResult(
     val latLng: LatLng,
 )
 
+internal data class DestinationSuggestion(
+    val placeId: String,
+    val primaryText: String,
+    val secondaryText: String,
+    val fullText: String,
+)
+
+private enum class RetryTarget {
+    QUERY,
+    SELECTION,
+}
+
 @Composable
 fun DestinationSearchBar(
     placesClient: PlacesClient,
@@ -65,80 +85,256 @@ fun DestinationSearchBar(
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf(selectedName) }
-    var predictions by remember { mutableStateOf<List<AutocompletePrediction>>(emptyList()) }
+    var suggestions by remember { mutableStateOf<List<DestinationSuggestion>>(emptyList()) }
     var showSuggestions by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    var debounceJob by remember { mutableStateOf<Job?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var retryTarget by remember { mutableStateOf<RetryTarget?>(null) }
+    var pendingSelection by remember { mutableStateOf<DestinationSuggestion?>(null) }
+    var autocompleteJob by remember { mutableStateOf<Job?>(null) }
+    var selectionJob by remember { mutableStateOf<Job?>(null) }
     var sessionToken by remember { mutableStateOf(AutocompleteSessionToken.newInstance()) }
+    val requestGate = remember { DestinationRequestGate() }
+    val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val autocompleteError = stringResource(R.string.destination_search_error)
+    val selectionError = stringResource(R.string.destination_selection_error)
 
-    LaunchedEffect(selectedName) {
-        if (selectedName.isNotBlank()) {
-            query = selectedName
-            showSuggestions = false
+    fun invalidateRequests() {
+        requestGate.invalidate()
+        autocompleteJob?.cancel()
+        selectionJob?.cancel()
+        autocompleteJob = null
+        selectionJob = null
+        isLoading = false
+    }
+
+    fun dismissSearch(clearFocus: Boolean) {
+        invalidateRequests()
+        showSuggestions = false
+        errorMessage = null
+        retryTarget = null
+        if (clearFocus) {
+            focusManager.clearFocus()
+            keyboardController?.hide()
         }
     }
 
-    Column(modifier = modifier) {
+    fun requestSuggestions(requestQuery: String) {
+        requestGate.invalidate()
+        autocompleteJob?.cancel()
+        val requestId = requestGate.next()
+        autocompleteJob = scope.launch {
+            delay(AUTOCOMPLETE_DEBOUNCE_MS)
+            if (!requestGate.isCurrent(requestId)) return@launch
+            isLoading = true
+            errorMessage = null
+            retryTarget = null
+            try {
+                val request = FindAutocompletePredictionsRequest.builder()
+                    .setQuery(requestQuery)
+                    .setSessionToken(sessionToken)
+                    .build()
+                val response = placesClient.findAutocompletePredictions(request).await()
+                if (!requestGate.isCurrent(requestId) || query != requestQuery || !showSuggestions) {
+                    return@launch
+                }
+                suggestions = response.autocompletePredictions.map { prediction ->
+                    DestinationSuggestion(
+                        placeId = prediction.placeId,
+                        primaryText = prediction.getPrimaryText(null).toString(),
+                        secondaryText = prediction.getSecondaryText(null).toString(),
+                        fullText = prediction.getFullText(null).toString(),
+                    )
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                if (requestGate.isCurrent(requestId)) {
+                    suggestions = emptyList()
+                    errorMessage = autocompleteError
+                    retryTarget = RetryTarget.QUERY
+                }
+            } finally {
+                if (requestGate.isCurrent(requestId)) isLoading = false
+            }
+        }
+    }
+
+    fun fetchSelection(suggestion: DestinationSuggestion) {
+        requestGate.invalidate()
+        autocompleteJob?.cancel()
+        selectionJob?.cancel()
+        val requestId = requestGate.next()
+        pendingSelection = suggestion
+        errorMessage = null
+        retryTarget = null
+        selectionJob = scope.launch {
+            isLoading = true
+            try {
+                val fields = listOf(Place.Field.LAT_LNG, Place.Field.DISPLAY_NAME)
+                val request = FetchPlaceRequest.builder(suggestion.placeId, fields)
+                    .setSessionToken(sessionToken)
+                    .build()
+                val response = placesClient.fetchPlace(request).await()
+                if (!requestGate.isCurrent(requestId)) return@launch
+                @Suppress("DEPRECATION")
+                val latLng = response.place.latLng
+                if (latLng == null) {
+                    errorMessage = selectionError
+                    retryTarget = RetryTarget.SELECTION
+                    showSuggestions = true
+                    return@launch
+                }
+                sessionToken = AutocompleteSessionToken.newInstance()
+                pendingSelection = null
+                showSuggestions = false
+                onDestinationSelected(
+                    DestinationResult(
+                        placeId = suggestion.placeId,
+                        name = suggestion.fullText,
+                        latLng = latLng,
+                    ),
+                )
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                if (requestGate.isCurrent(requestId)) {
+                    errorMessage = selectionError
+                    retryTarget = RetryTarget.SELECTION
+                    showSuggestions = true
+                }
+            } finally {
+                if (requestGate.isCurrent(requestId)) isLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(selectedName) {
+        if (selectedName != query) {
+            dismissSearch(clearFocus = true)
+            query = selectedName
+            suggestions = emptyList()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            requestGate.invalidate()
+            autocompleteJob?.cancel()
+            selectionJob?.cancel()
+        }
+    }
+
+    DestinationSearchField(
+        query = query,
+        suggestions = suggestions,
+        expanded = showSuggestions,
+        isLoading = isLoading,
+        errorMessage = errorMessage,
+        onQueryChanged = { newQuery ->
+            invalidateRequests()
+            query = newQuery
+            suggestions = emptyList()
+            errorMessage = null
+            retryTarget = null
+            pendingSelection = null
+            showSuggestions = newQuery.length >= MIN_AUTOCOMPLETE_CHARACTERS
+            if (showSuggestions) requestSuggestions(newQuery)
+        },
+        onFocusGained = {
+            if (query.length >= MIN_AUTOCOMPLETE_CHARACTERS) {
+                showSuggestions = true
+                if (suggestions.isEmpty()) requestSuggestions(query)
+            }
+        },
+        onClear = {
+            dismissSearch(clearFocus = true)
+            query = ""
+            suggestions = emptyList()
+            pendingSelection = null
+        },
+        onDismiss = { dismissSearch(clearFocus = true) },
+        onRetry = {
+            when (retryTarget) {
+                RetryTarget.QUERY -> requestSuggestions(query)
+                RetryTarget.SELECTION -> pendingSelection?.let(::fetchSelection)
+                null -> Unit
+            }
+        },
+        onSuggestionSelected = { suggestion ->
+            query = suggestion.fullText
+            suggestions = emptyList()
+            showSuggestions = false
+            errorMessage = null
+            retryTarget = null
+            requestGate.invalidate()
+            autocompleteJob?.cancel()
+            focusManager.clearFocus()
+            keyboardController?.hide()
+            fetchSelection(suggestion)
+        },
+        modifier = modifier,
+    )
+}
+
+@Composable
+internal fun DestinationSearchField(
+    query: String,
+    suggestions: List<DestinationSuggestion>,
+    expanded: Boolean,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onQueryChanged: (String) -> Unit,
+    onFocusGained: () -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+    onSuggestionSelected: (DestinationSuggestion) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val popupVisible = expanded && (isLoading || errorMessage != null || suggestions.isNotEmpty())
+
+    BackHandler(enabled = expanded, onBack = onDismiss)
+
+    BoxWithConstraints(modifier = modifier) {
+        val anchorWidth = maxWidth
         OutlinedTextField(
             value = query,
-            onValueChange = { newQuery ->
-                query = newQuery
-                showSuggestions = newQuery.length >= 3
-                debounceJob?.cancel()
-                if (newQuery.length >= 3) {
-                    debounceJob = scope.launch {
-                        delay(500)
-                        isLoading = true
-                        try {
-                            val request = FindAutocompletePredictionsRequest.builder()
-                                .setQuery(newQuery)
-                                .setSessionToken(sessionToken)
-                                .build()
-                            val response = placesClient
-                                .findAutocompletePredictions(request)
-                                .await()
-                            predictions = response.autocompletePredictions
-                        } catch (_: Exception) {
-                            predictions = emptyList()
-                        }
-                        isLoading = false
-                    }
-                } else {
-                    predictions = emptyList()
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
+            onValueChange = onQueryChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { if (it.isFocused) onFocusGained() }
+                .testTag(DESTINATION_SEARCH_FIELD_TAG),
             placeholder = {
                 Text(
-                    "Where are you heading?",
+                    stringResource(R.string.destination_search_hint),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Filled.Search,
-                    contentDescription = "Search destination",
+                    contentDescription = stringResource(R.string.destination_search_description),
                     modifier = Modifier.size(20.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             },
             trailingIcon = {
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = {
-                        query = ""
-                        predictions = emptyList()
-                        showSuggestions = false
-                    }) {
+                    IconButton(onClick = onClear) {
                         Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = "Clear",
+                            contentDescription = stringResource(R.string.destination_search_clear),
                             modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onDismiss() }),
             singleLine = true,
             shape = MaterialTheme.shapes.large,
             colors = OutlinedTextFieldDefaults.colors(
@@ -152,66 +348,64 @@ fun DestinationSearchBar(
             ),
         )
 
-        AnimatedVisibility(
-            visible = showSuggestions && predictions.isNotEmpty(),
-            enter = fadeIn(),
-            exit = fadeOut(),
+        DropdownMenu(
+            expanded = popupVisible,
+            onDismissRequest = onDismiss,
+            modifier = Modifier
+                .width(anchorWidth)
+                .heightIn(max = 240.dp)
+                .testTag(DESTINATION_SUGGESTIONS_TAG),
+            offset = DpOffset(x = 0.dp, y = 4.dp),
+            properties = PopupProperties(focusable = false),
         ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                shape = MaterialTheme.shapes.medium,
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ),
-            ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 240.dp),
-                ) {
-                    items(
-                        items = predictions,
-                        key = { it.placeId },
-                    ) { prediction ->
-                        PredictionItem(
-                            prediction = prediction,
-                            onClick = {
-                                query = prediction.getFullText(null).toString()
-                                showSuggestions = false
-                                predictions = emptyList()
+            when {
+                isLoading -> {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.destination_search_loading)) },
+                        onClick = {},
+                        enabled = false,
+                        leadingIcon = {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .testTag(DESTINATION_LOADING_TAG),
+                                strokeWidth = 2.dp,
+                            )
+                        },
+                    )
+                }
 
-                                scope.launch {
-                                    try {
-                                        val fields = listOf(Place.Field.LAT_LNG, Place.Field.DISPLAY_NAME)
-                                        val fetchRequest = FetchPlaceRequest.builder(
-                                            prediction.placeId,
-                                            fields,
-                                        ).setSessionToken(sessionToken).build()
-                                        val fetchResponse = placesClient.fetchPlace(fetchRequest).await()
-                                        sessionToken = AutocompleteSessionToken.newInstance()
-                                        val place = fetchResponse.place
-                                        @Suppress("DEPRECATION")
-                                        val latLng = place.latLng
-                                        if (latLng != null) {
-                                            onDestinationSelected(
-                                                DestinationResult(
-                                                    placeId = prediction.placeId,
-                                                    name = prediction.getFullText(null).toString(),
-                                                    latLng = latLng,
-                                                )
-                                            )
-                                        }
-                                    } catch (_: Exception) {
-                                        // Fetch failed silently
-                                    }
+                errorMessage != null -> {
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = errorMessage,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                TextButton(onClick = onRetry) {
+                                    Text(stringResource(R.string.retry))
                                 }
-                            },
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    }
+                            }
+                        },
+                        onClick = {},
+                    )
+                }
+
+                else -> suggestions.forEach { suggestion ->
+                    DropdownMenuItem(
+                        text = { SuggestionText(suggestion) },
+                        onClick = { onSuggestionSelected(suggestion) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Place,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                    )
                 }
             }
         }
@@ -219,34 +413,19 @@ fun DestinationSearchBar(
 }
 
 @Composable
-private fun PredictionItem(
-    prediction: AutocompletePrediction,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Place,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.primary,
+private fun SuggestionText(suggestion: DestinationSuggestion) {
+    Column {
+        Text(
+            text = suggestion.primaryText,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        if (suggestion.secondaryText.isNotBlank()) {
+            Spacer(Modifier.height(2.dp))
             Text(
-                text = prediction.getPrimaryText(null).toString(),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = prediction.getSecondaryText(null).toString(),
+                text = suggestion.secondaryText,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -255,3 +434,22 @@ private fun PredictionItem(
         }
     }
 }
+
+internal class DestinationRequestGate {
+    private var generation: Long = 0L
+
+    fun next(): Long = ++generation
+
+    fun invalidate() {
+        generation++
+    }
+
+    fun isCurrent(requestId: Long): Boolean = requestId == generation
+}
+
+internal const val DESTINATION_SEARCH_FIELD_TAG = "destination_search_field"
+internal const val DESTINATION_SUGGESTIONS_TAG = "destination_suggestions"
+internal const val DESTINATION_LOADING_TAG = "destination_loading"
+
+private const val MIN_AUTOCOMPLETE_CHARACTERS = 3
+private const val AUTOCOMPLETE_DEBOUNCE_MS = 500L

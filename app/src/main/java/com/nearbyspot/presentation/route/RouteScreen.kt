@@ -5,16 +5,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,35 +20,26 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,9 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -95,9 +80,8 @@ import com.nearbyspot.domain.model.AlongRoutePlace
 import com.nearbyspot.presentation.components.CategoryChipRow
 import com.nearbyspot.presentation.components.DestinationSearchBar
 import com.nearbyspot.presentation.detail.PlaceDetailSheet
-import com.nearbyspot.presentation.theme.StarYellow
+import com.nearbyspot.presentation.util.DurationFormatter
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 @Composable
 fun RouteScreen(
@@ -141,10 +125,10 @@ fun RouteScreen(
         val arPlace = state.selectedPlace!!
         PlaceDetailSheet(
             place = arPlace.place,
-            travelMinutes = arPlace.reachableMinutes.roundToInt(),
-            travelLabel = "${arPlace.reachableMinutes.roundToInt()} min away",
+            travelMinutes = arPlace.reachableSeconds / 60,
+            travelLabel = DurationFormatter.ahead(arPlace.reachableSeconds),
             distanceMeters = 0,
-            detourLabel = "+${arPlace.detourMinutes.roundToInt()} min detour",
+            detourLabel = DurationFormatter.detour(arPlace.detourSeconds),
             onDismiss = {
                 showDetail = false
                 viewModel.onPlaceSelected(null)
@@ -191,8 +175,6 @@ fun RouteScreen(
     }
 
     val bubbleListState = rememberLazyListState()
-    val hasHighlight = state.highlightedPlaceId != null
-
     val isDarkTheme = isSystemInDarkTheme()
     val context = LocalContext.current
     val darkMapStyle = remember(isDarkTheme) {
@@ -275,7 +257,8 @@ fun RouteScreen(
                         position = LatLng(arPlace.place.latitude, arPlace.place.longitude)
                     ),
                     title = arPlace.place.name,
-                    snippet = "${arPlace.reachableMinutes.roundToInt()} min  \u00B7  +${arPlace.detourMinutes.roundToInt()} min detour",
+                    snippet = "${DurationFormatter.ahead(arPlace.reachableSeconds)}  \u00B7  " +
+                        DurationFormatter.detour(arPlace.detourSeconds),
                     icon = if (isHighlighted) {
                         BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
                     } else {
@@ -336,24 +319,6 @@ fun RouteScreen(
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .padding(vertical = 4.dp),
             )
-
-            AnimatedVisibility(
-                visible = showFilters,
-                enter = slideInVertically { -it } + fadeIn(),
-                exit = slideOutVertically { -it } + fadeOut(),
-            ) {
-                RouteFilterBar(
-                    filterSettings = state.filterSettings,
-                    onMaxDetourChanged = viewModel::onMaxDetourChanged,
-                    onTransportModeChanged = viewModel::onTransportModeChanged,
-                    onPriceLevelChanged = viewModel::onPriceLevelChanged,
-                    onOpenNowToggled = viewModel::onOpenNowToggled,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
 
             Spacer(Modifier.height(8.dp))
 
@@ -491,15 +456,11 @@ fun RouteScreen(
                                 items = resultState.places,
                                 key = { _, item -> item.place.placeId },
                             ) { _, arPlace ->
-                                RouteStopBubble(
+                                RouteStopCard(
                                     arPlace = arPlace,
                                     isHighlighted = arPlace.place.placeId == state.highlightedPlaceId,
                                     onClick = {
                                         viewModel.onPlaceHighlighted(arPlace.place.placeId)
-                                    },
-                                    onInfoClick = {
-                                        viewModel.onPlaceSelected(arPlace)
-                                        showDetail = true
                                     },
                                 )
                             }
@@ -509,116 +470,81 @@ fun RouteScreen(
             }
 
             state.routeInfo?.let { routeInfo ->
-                val durationMin = routeInfo.durationSeconds / 60
-                val distanceKm = "%.1f".format(routeInfo.distanceMeters / 1000.0)
-                Row(
+                RouteSummaryCard(
+                    destinationName = state.destinationName,
+                    distanceMeters = routeInfo.distanceMeters,
+                    durationSeconds = routeInfo.durationSeconds,
+                    resultCount = state.alongRoutePlaces.size,
+                    isLoading = state.isLoadingPlaces,
+                    onRefresh = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.onRefreshPlaces()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "$distanceKm km  \u00B7  $durationMin min",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            viewModel.onRefreshPlaces()
-                        },
-                        enabled = !state.isLoadingPlaces,
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        if (state.isRefreshingPlaces) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = "Refresh places",
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        if (state.routeInfo != null) {
-            if (hasHighlight) {
-                SmallFloatingActionButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        showFilters = !showFilters
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 24.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    elevation = FloatingActionButtonDefaults.elevation(4.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.FilterList,
-                        contentDescription = "Toggle filters",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            } else {
-                FloatingActionButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        showFilters = !showFilters
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 24.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    elevation = FloatingActionButtonDefaults.elevation(6.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.FilterList,
-                        contentDescription = "Toggle filters",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                )
             }
         }
 
         AnimatedVisibility(
-            visible = hasHighlight,
+            visible = showFilters,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp),
-            enter = slideInVertically { it } + fadeIn(),
-            exit = slideOutVertically { it } + fadeOut(),
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(start = 16.dp, top = 132.dp, end = 16.dp),
+            enter = slideInVertically { -it } + fadeIn(),
+            exit = slideOutVertically { -it } + fadeOut(),
         ) {
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shadowElevation = 8.dp,
+            ) {
+                RouteFilterBar(
+                    filterSettings = state.filterSettings,
+                    onMaxDetourChanged = viewModel::onMaxDetourChanged,
+                    onTransportModeChanged = viewModel::onTransportModeChanged,
+                    onPriceLevelChanged = viewModel::onPriceLevelChanged,
+                    onOpenNowToggled = viewModel::onOpenNowToggled,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+        }
+
+        if (state.routeInfo != null) {
             val highlighted = state.alongRoutePlaces.find {
                 it.place.placeId == state.highlightedPlaceId
             }
-            if (highlighted != null) {
-                Button(onClick = {
-                    viewModel.onPlaceSelected(highlighted)
-                    showDetail = true
-                }) {
-                    Text("View Details")
-                }
-            }
+            RouteActionDock(
+                filtersVisible = showFilters,
+                activeFilterCount = activeRouteFilterCount(state.filterSettings),
+                highlightedPlaceName = highlighted?.place?.name,
+                onToggleFilters = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    showFilters = !showFilters
+                },
+                onViewDetails = {
+                    highlighted?.let {
+                        viewModel.onPlaceSelected(it)
+                        showDetail = true
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+            )
         }
 
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 100.dp),
+                .padding(bottom = 112.dp),
         )
     }
 }
@@ -640,140 +566,4 @@ private sealed interface RouteResultState {
             else -> Empty
         }
     }
-}
-
-@Composable
-private fun RouteStopBubble(
-    arPlace: AlongRoutePlace,
-    isHighlighted: Boolean,
-    onClick: () -> Unit,
-    onInfoClick: () -> Unit,
-) {
-    val place = arPlace.place
-    val reachMin = arPlace.reachableMinutes.roundToInt()
-    val detourMin = arPlace.detourMinutes.roundToInt()
-    val haptic = LocalHapticFeedback.current
-    val priceText = if (place.priceLevel != null) "$".repeat(place.priceLevel) else "\u2014"
-
-    val elevation by animateDpAsState(
-        targetValue = if (isHighlighted) 12.dp else 2.dp,
-        animationSpec = tween(durationMillis = 300),
-        label = "routeBubbleElevation",
-    )
-
-    Card(
-        modifier = Modifier
-            .width(200.dp)
-            .clickable {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            },
-        shape = MaterialTheme.shapes.large,
-        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isHighlighted) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
-        ),
-        border = if (isHighlighted) {
-            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-        } else null,
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = place.name,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                    color = if (isHighlighted) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                )
-                Spacer(Modifier.width(4.dp))
-                IconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onInfoClick()
-                    },
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Info,
-                        contentDescription = "View details",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Star,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = StarYellow,
-                )
-                Spacer(Modifier.width(3.dp))
-                Text("${place.rating}", style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = "(${formatReviewCount(place.userRatingCount)})",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.AccessTime,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.width(3.dp))
-                Text(
-                    text = "$reachMin min",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "\u00B7",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "+$detourMin min detour",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-
-            if (priceText != "\u2014") {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = priceText,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-private fun formatReviewCount(count: Int): String = when {
-    count >= 1000 -> "${count / 1000}.${(count % 1000) / 100}k"
-    else -> count.toString()
 }

@@ -1,4 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NearbySpot</string>
+    <string name="destination_search_hint">Where are you heading?</string>
+    <string name="destination_search_description">Search destination</string>
+    <string name="destination_search_clear">Clear destination</string>
+    <string name="destination_search_loading">Searching destinations…</string>
+    <string name="destination_search_error">Couldn’t load destinations</string>
+    <string name="destination_selection_error">Couldn’t select that destination</string>
+    <string name="retry">Retry</string>
+    <string name="route_to_destination">To %1$s</string>
+    <string name="route_destination_fallback">destination</string>
+    <string name="route_refresh_stops">Refresh route stops</string>
+    <string name="route_refreshing_stops">Refreshing route stops</string>
+    <string name="route_show_filters">Show route filters</string>
+    <string name="route_hide_filters">Hide route filters</string>
+    <string name="route_active_filters">%1$d active</string>
+    <string name="route_filters">Filters</string>
+    <string name="route_filters_with_count">Filters (%1$d)</string>
+    <string name="route_view_details">View details</string>
+    <string name="route_view_details_for">View details for %1$s</string>
+    <string name="route_filter_travel_mode">Travel mode</string>
+    <string name="route_filter_maximum_detour">Maximum detour</string>
+    <string name="route_filter_maximum_price">Maximum price</string>
+    <string name="route_filter_any_price">Any</string>
+    <string name="route_filter_open_now">Open now</string>
+    <string name="route_rating_and_reviews">%1$s stars, %2$d reviews</string>
+    <string name="route_price_level">Price %1$s</string>
+    <string name="route_currently_open">Currently open</string>
+    <string name="route_currently_closed">Currently closed</string>
+    <plurals name="route_verified_stops">
+        <item quantity="one">%1$d verified stop</item>
+        <item quantity="other">%1$d verified stops</item>
+    </plurals>
 </resources>

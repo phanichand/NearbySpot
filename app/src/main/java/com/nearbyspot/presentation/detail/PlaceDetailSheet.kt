@@ -125,51 +125,55 @@ fun PlaceDetailSheet(
         ) {
             if (photoProvider != null && place.photoRefs.isNotEmpty()) {
                 PlaceHeroPhoto(placeId = place.placeId, photoProvider = photoProvider)
-                Spacer(Modifier.height(12.dp))
             }
 
-            Row(
+            Text(
+                text = place.name,
+                style = MaterialTheme.typography.headlineSmall,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = place.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.weight(1f),
-                )
-                if (onToggleFavorite != null) {
-                    IconButton(onClick = onToggleFavorite) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                            contentDescription = if (isFavorite) "Remove from saved" else "Save place",
-                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+            )
+
+            if (onToggleFavorite != null || place.isOpen != null) {
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (onToggleFavorite != null) {
+                        IconButton(onClick = onToggleFavorite) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                                contentDescription = if (isFavorite) "Remove from saved" else "Save place",
+                                tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                }
-                if (place.isOpen != null) {
-                    Spacer(Modifier.width(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.Circle,
-                            contentDescription = if (place.isOpen) "Currently open" else "Currently closed",
-                            modifier = Modifier.size(10.dp),
-                            tint = if (place.isOpen) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            },
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = if (place.isOpen) "Open" else "Closed",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (place.isOpen) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            },
-                        )
+                    if (place.isOpen != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Circle,
+                                contentDescription = if (place.isOpen) "Currently open" else "Currently closed",
+                                modifier = Modifier.size(10.dp),
+                                tint = if (place.isOpen) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = if (place.isOpen) "Open" else "Closed",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (place.isOpen) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -194,21 +198,23 @@ fun PlaceDetailSheet(
 
             Spacer(Modifier.height(8.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.AccessTime,
-                    contentDescription = "Travel time",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = travelLabel,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.AccessTime,
+                        contentDescription = "Travel time",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = travelLabel,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 if (distanceMeters > 0) {
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.height(2.dp))
                     val distanceText = if (distanceMeters >= 1000) {
                         "%.1f km".format(distanceMeters / 1000.0)
                     } else {
@@ -242,19 +248,21 @@ fun PlaceDetailSheet(
 
             Spacer(Modifier.height(8.dp))
 
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(
-                    imageVector = Icons.Filled.Place,
-                    contentDescription = "Address",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = place.address,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (place.address.isNotBlank()) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Icon(
+                        imageVector = Icons.Filled.Place,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = place.address,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -386,23 +394,26 @@ private fun PlaceHeroPhoto(placeId: String, photoProvider: PlacePhotoProvider) {
         loading = false
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(16f / 9f)
-            .clip(MaterialTheme.shapes.medium),
-        contentAlignment = Alignment.Center,
-    ) {
-        when {
-            loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            bitmap != null -> bitmap?.let { bmp ->
-                Image(
-                    bitmap = bmp.asImageBitmap(),
-                    contentDescription = "Place photo",
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Crop,
-                )
+    if (loading || bitmap != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(MaterialTheme.shapes.medium),
+            contentAlignment = Alignment.Center,
+        ) {
+            when {
+                loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                bitmap != null -> bitmap?.let { bmp ->
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = "Place photo",
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
             }
         }
+        Spacer(Modifier.height(12.dp))
     }
 }

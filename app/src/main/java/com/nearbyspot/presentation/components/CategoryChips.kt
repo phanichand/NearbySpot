@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
@@ -76,7 +77,7 @@ fun CategoryChipRow(
                 leadingIcon = {
                     Icon(
                         imageVector = category.icon,
-                        contentDescription = category.label,
+                        contentDescription = null,
                         modifier = Modifier.size(FilterChipDefaults.IconSize),
                         tint = if (selected) {
                             MaterialTheme.colorScheme.onPrimaryContainer
@@ -85,6 +86,7 @@ fun CategoryChipRow(
                         },
                     )
                 },
+                modifier = Modifier.heightIn(min = 48.dp),
             )
         }
         Spacer(Modifier.width(16.dp))
