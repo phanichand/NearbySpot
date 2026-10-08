@@ -50,7 +50,7 @@ fun PlaceBubble(
     val haptic = LocalHapticFeedback.current
 
     val elevation by animateDpAsState(
-        targetValue = if (isHighlighted) 12.dp else 2.dp,
+        targetValue = if (isHighlighted) 8.dp else 1.dp,
         animationSpec = tween(durationMillis = 300),
         label = "bubbleElevation",
     )
@@ -74,13 +74,13 @@ fun PlaceBubble(
             containerColor = if (isHighlighted) {
                 MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.surface
+                MaterialTheme.colorScheme.surfaceContainerLow
             },
         ),
         border = if (isHighlighted) {
-            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+            BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
         } else {
-            null
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
         },
     ) {
         Column(modifier = Modifier.padding(12.dp)) {

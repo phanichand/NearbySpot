@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,25 +27,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -80,7 +81,6 @@ import com.nearbyspot.domain.model.FilterSettings
 import com.nearbyspot.domain.model.RankedPlace
 import com.nearbyspot.presentation.components.CategoryChipRow
 import com.nearbyspot.presentation.components.PlaceBubble
-import com.nearbyspot.presentation.components.PlaceCard
 import com.nearbyspot.presentation.detail.PlaceDetailSheet
 import com.nearbyspot.presentation.filter.FilterBar
 import kotlinx.coroutines.launch
@@ -203,7 +203,7 @@ fun HomeScreen(
                 mapStyleOptions = darkMapStyle,
             ),
             uiSettings = MapUiSettings(
-                myLocationButtonEnabled = true,
+                myLocationButtonEnabled = false,
                 zoomControlsEnabled = false,
                 mapToolbarEnabled = false,
             ),
@@ -248,37 +248,123 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
+                .padding(top = 8.dp)
                 .align(Alignment.TopCenter),
         ) {
-            CategoryChipRow(
-                selectedCategories = state.selectedCategories,
-                onCategoryToggled = { cat ->
-                    viewModel.onCategoryToggled(cat)
-                    viewModel.onPlaceHighlighted(null)
-                },
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .padding(vertical = 8.dp),
-            )
-
-            AnimatedVisibility(
-                visible = showFilters,
-                enter = slideInVertically { -it } + fadeIn(),
-                exit = slideOutVertically { -it } + fadeOut(),
+                    .padding(horizontal = 12.dp),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shadowElevation = 6.dp,
             ) {
-                FilterBar(
-                    filterSettings = state.filterSettings,
-                    onTravelTimeChanged = viewModel::onTravelTimeChanged,
-                    onTransportModeChanged = viewModel::onTransportModeChanged,
-                    onPriceLevelChanged = viewModel::onPriceLevelChanged,
-                    onOpenNowToggled = viewModel::onOpenNowToggled,
-                    onSortChanged = viewModel::onSortChanged,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 8.dp, top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Explore nearby",
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                            Text(
+                                text = "Pick what sounds good",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                val latitude = state.userLatitude
+                                val longitude = state.userLongitude
+                                if (latitude != null && longitude != null) {
+                                    scope.launch {
+                                        cameraPositionState.animate(
+                                            CameraUpdateFactory.newLatLngZoom(
+                                                LatLng(latitude, longitude),
+                                                14f,
+                                            ),
+                                        )
+                                    }
+                                }
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MyLocation,
+                                contentDescription = "Center on my location",
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onNavigateToSaved()
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Bookmark,
+                                contentDescription = "Saved places",
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                showFilters = !showFilters
+                            },
+                        ) {
+                            if (hasActiveFilters) {
+                                BadgedBox(
+                                    badge = {
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(8.dp),
+                                        )
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.FilterList,
+                                        contentDescription = "Toggle filters (active)",
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.FilterList,
+                                    contentDescription = "Toggle filters",
+                                )
+                            }
+                        }
+                    }
+
+                    CategoryChipRow(
+                        selectedCategories = state.selectedCategories,
+                        onCategoryToggled = { cat ->
+                            viewModel.onCategoryToggled(cat)
+                            viewModel.onPlaceHighlighted(null)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                    )
+
+                    AnimatedVisibility(
+                        visible = showFilters,
+                        enter = slideInVertically { -it } + fadeIn(),
+                        exit = slideOutVertically { -it } + fadeOut(),
+                    ) {
+                        FilterBar(
+                            filterSettings = state.filterSettings,
+                            onTravelTimeChanged = viewModel::onTravelTimeChanged,
+                            onTransportModeChanged = viewModel::onTransportModeChanged,
+                            onPriceLevelChanged = viewModel::onPriceLevelChanged,
+                            onOpenNowToggled = viewModel::onOpenNowToggled,
+                            onSortChanged = viewModel::onSortChanged,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(8.dp))
@@ -352,167 +438,79 @@ fun HomeScreen(
                     }
 
                     is ResultState.Results -> {
-                        Column {
-                            LazyRow(
-                                state = bubbleListState,
-                                contentPadding = PaddingValues(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                itemsIndexed(
-                                    items = resultState.places,
-                                    key = { _, item -> item.place.placeId },
-                                ) { _, rankedPlace ->
-                                    PlaceBubble(
-                                        rankedPlace = rankedPlace,
-                                        isHighlighted = rankedPlace.place.placeId == state.highlightedPlaceId,
-                                        onClick = {
-                                            viewModel.onPlaceHighlighted(rankedPlace.place.placeId)
-                                        },
-                                        onLongClick = {
-                                            viewModel.onPlaceSelected(rankedPlace)
-                                            showDetail = true
-                                        },
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            Column(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                resultState.places.forEach { rankedPlace ->
-                                    PlaceCard(
-                                        rankedPlace = rankedPlace,
-                                        onClick = {
-                                            viewModel.onPlaceSelected(rankedPlace)
-                                            showDetail = true
-                                        },
-                                    )
-                                }
+                        LazyRow(
+                            state = bubbleListState,
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            itemsIndexed(
+                                items = resultState.places,
+                                key = { _, item -> item.place.placeId },
+                            ) { _, rankedPlace ->
+                                PlaceBubble(
+                                    rankedPlace = rankedPlace,
+                                    isHighlighted = rankedPlace.place.placeId == state.highlightedPlaceId,
+                                    onClick = {
+                                        viewModel.onPlaceHighlighted(rankedPlace.place.placeId)
+                                    },
+                                    onLongClick = {
+                                        viewModel.onPlaceSelected(rankedPlace)
+                                        showDetail = true
+                                    },
+                                )
                             }
                         }
                     }
-                }
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 16.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            SmallFloatingActionButton(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onNavigateToSaved()
-                },
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                elevation = FloatingActionButtonDefaults.elevation(6.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Bookmark,
-                    contentDescription = "Saved places",
-                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-            }
-            FloatingActionButton(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onNavigateToRoute()
-                },
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                elevation = FloatingActionButtonDefaults.elevation(6.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Route,
-                    contentDescription = "Plan a route",
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
-        }
-
-        // Filter FAB -- shrinks when View Details is visible to avoid competing
-        if (hasHighlight) {
-            SmallFloatingActionButton(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    showFilters = !showFilters
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 24.dp),
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                elevation = FloatingActionButtonDefaults.elevation(4.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.FilterList,
-                    contentDescription = "Toggle filters",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        } else {
-            FloatingActionButton(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    showFilters = !showFilters
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 24.dp),
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                elevation = FloatingActionButtonDefaults.elevation(6.dp),
-            ) {
-                if (hasActiveFilters) {
-                    BadgedBox(
-                        badge = {
-                            Badge(
-                                containerColor = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(8.dp),
-                            )
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.FilterList,
-                            contentDescription = "Toggle filters (active)",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
                     }
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.FilterList,
-                        contentDescription = "Toggle filters",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
                 }
             }
-        }
 
-        // View Details button
-        AnimatedVisibility(
-            visible = hasHighlight,
+        Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 24.dp),
-            enter = slideInVertically { it } + fadeIn(),
-            exit = slideOutVertically { it } + fadeOut(),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = 6.dp,
         ) {
-            val highlighted = state.rankedPlaces.find {
-                it.place.placeId == state.highlightedPlaceId
-            }
-            if (highlighted != null) {
-                Button(
+            Row(
+                modifier = Modifier.padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FilledTonalButton(
                     onClick = {
-                        viewModel.onPlaceSelected(highlighted)
-                        showDetail = true
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToRoute()
                     },
                 ) {
-                    Text("View Details")
+                    Icon(
+                        imageVector = Icons.Filled.Route,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Plan a route")
+                }
+
+                AnimatedVisibility(
+                    visible = hasHighlight,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    val highlighted = state.rankedPlaces.find {
+                        it.place.placeId == state.highlightedPlaceId
+                    }
+                    if (highlighted != null) {
+                        Button(
+                            onClick = {
+                                viewModel.onPlaceSelected(highlighted)
+                                showDetail = true
+                            },
+                        ) {
+                            Text("View details")
+                        }
+                    }
                 }
             }
         }
