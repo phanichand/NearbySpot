@@ -221,12 +221,12 @@ class GetAlongRoutePlacesUseCaseTest {
     }
 
     @Test
-    fun `review open price destination and duplicate filters run before matrix budgeting`() = runTest {
-        val good = place("good")
+    fun `100 review boundary and other filters run before matrix budgeting`() = runTest {
+        val good = place("good", reviewCount = 100)
         coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } returns listOf(
             good,
             good,
-            place("few-reviews", reviewCount = 19),
+            place("below-review-threshold", reviewCount = 99),
             place("closed", isOpen = false),
             place("unknown", isOpen = null),
             place("expensive", priceLevel = 4),

@@ -309,7 +309,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
 
     companion object {
         private const val TAG = "AlongRoutePlaces"
-        const val MIN_REVIEW_COUNT = 20
+        const val MIN_REVIEW_COUNT = 100
         const val MAX_RESULTS = 10
         const val SEARCH_RADIUS_METERS = 2000.0
         const val SKIP_NEAR_DESTINATION_METERS = 3000.0
