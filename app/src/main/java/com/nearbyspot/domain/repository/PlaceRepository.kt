@@ -1,7 +1,9 @@
 package com.nearbyspot.domain.repository
 
+import com.nearbyspot.domain.model.GeoPoint
 import com.nearbyspot.domain.model.Place
 import com.nearbyspot.domain.model.RouteInfo
+import com.nearbyspot.domain.model.RouteMatrixEntry
 import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.domain.model.TravelInfo
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +22,12 @@ interface PlaceRepository {
         destinations: List<Place>,
         mode: TransportMode,
     ): List<TravelInfo>
+
+    suspend fun getRouteMatrix(
+        origins: List<GeoPoint>,
+        destinations: List<GeoPoint>,
+        mode: TransportMode,
+    ): List<RouteMatrixEntry>
 
     suspend fun computeRoute(
         originLat: Double,

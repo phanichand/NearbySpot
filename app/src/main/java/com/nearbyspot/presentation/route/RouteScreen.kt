@@ -88,6 +88,7 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
+import com.nearbyspot.domain.model.RouteSearchProgress
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.nearbyspot.R
 import com.nearbyspot.domain.model.AlongRoutePlace
@@ -394,7 +395,18 @@ fun RouteScreen(
                                 CircularProgressIndicator(modifier = Modifier.size(28.dp))
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    text = if (state.isLoadingRoute) "Computing route..." else "Finding stops...",
+                                    text = if (state.isLoadingRoute) {
+                                        "Computing route..."
+                                    } else {
+                                        when (val progress = state.routeSearchProgress) {
+                                            RouteSearchProgress.Planning -> "Planning route stops..."
+                                            is RouteSearchProgress.SearchingStops ->
+                                                "Searching areas ${progress.completed} of ${progress.total}..."
+                                            RouteSearchProgress.CalculatingTravelTimes ->
+                                                "Verifying travel times..."
+                                            RouteSearchProgress.Complete, null -> "Finding stops..."
+                                        }
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -438,6 +450,32 @@ fun RouteScreen(
                                 Spacer(Modifier.height(16.dp))
                                 OutlinedButton(onClick = { showFilters = true }) {
                                     Text("Adjust Filters")
+                                }
+                            }
+                        }
+                    }
+
+                    RouteResultState.Failure -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.errorContainer,
+                                    shape = MaterialTheme.shapes.large,
+                                )
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "Couldn't search route stops",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                OutlinedButton(onClick = viewModel::onRefreshPlaces) {
+                                    Text("Try again")
                                 }
                             }
                         }
@@ -491,14 +529,22 @@ fun RouteScreen(
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             viewModel.onRefreshPlaces()
                         },
+                        enabled = !state.isLoadingPlaces,
                         modifier = Modifier.size(28.dp),
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh places",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
+                        if (state.isRefreshingPlaces) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = "Refresh places",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
             }
@@ -581,14 +627,17 @@ private sealed interface RouteResultState {
     data object Idle : RouteResultState
     data object Loading : RouteResultState
     data object Empty : RouteResultState
+    data object Failure : RouteResultState
     data class Results(val places: List<AlongRoutePlace>) : RouteResultState
 
     companion object {
         fun from(state: RouteUiState): RouteResultState = when {
+            state.alongRoutePlaces.isNotEmpty() -> Results(state.alongRoutePlaces)
             state.isLoadingRoute || state.isLoadingPlaces -> Loading
             state.routeInfo == null -> Idle
+            state.routeSearchFailure != null -> Failure
             state.alongRoutePlaces.isEmpty() -> Empty
-            else -> Results(state.alongRoutePlaces)
+            else -> Empty
         }
     }
 }

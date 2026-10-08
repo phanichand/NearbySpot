@@ -40,7 +40,13 @@ data class RouteMatrixElement(
     @SerializedName("destinationIndex") val destinationIndex: Int?,
     @SerializedName("duration") val duration: String?,
     @SerializedName("distanceMeters") val distanceMeters: Int?,
+    @SerializedName("status") val status: RouteMatrixStatus?,
     @SerializedName("condition") val condition: String?,
+)
+
+data class RouteMatrixStatus(
+    @SerializedName("code") val code: Int?,
+    @SerializedName("message") val message: String?,
 )
 
 // --- computeRoutes Request ---

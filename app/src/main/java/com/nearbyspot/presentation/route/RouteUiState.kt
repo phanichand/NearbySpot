@@ -6,11 +6,15 @@ import com.nearbyspot.domain.model.AlongRoutePlace
 import com.nearbyspot.domain.model.Category
 import com.nearbyspot.domain.model.RouteFilterSettings
 import com.nearbyspot.domain.model.RouteInfo
+import com.nearbyspot.domain.model.RouteSearchProgress
+import com.nearbyspot.domain.model.RouteSearchFailure
 
 @Immutable
 data class RouteUiState(
     val isLoadingRoute: Boolean = false,
-    val isLoadingPlaces: Boolean = false,
+    val routeSearchProgress: RouteSearchProgress? = null,
+    val routeSearchFailure: RouteSearchFailure? = null,
+    val isRefreshingPlaces: Boolean = false,
     val routeInfo: RouteInfo? = null,
     val destinationName: String = "",
     val destinationLatLng: LatLng? = null,
@@ -25,4 +29,7 @@ data class RouteUiState(
     val errorMessage: String? = null,
     val locationPermissionGranted: Boolean = false,
     val favoriteIds: Set<String> = emptySet(),
-)
+) {
+    val isLoadingPlaces: Boolean
+        get() = routeSearchProgress != null
+}

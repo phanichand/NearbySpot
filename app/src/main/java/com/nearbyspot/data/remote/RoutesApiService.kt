@@ -13,7 +13,7 @@ interface RoutesApiService {
     @POST("distanceMatrix/v2:computeRouteMatrix")
     suspend fun computeRouteMatrix(
         @Header("X-Goog-FieldMask") fieldMask: String =
-            "originIndex,destinationIndex,duration,distanceMeters",
+            "originIndex,destinationIndex,duration,distanceMeters,status,condition",
         @Body request: RouteMatrixRequest,
     ): List<RouteMatrixElement>
 

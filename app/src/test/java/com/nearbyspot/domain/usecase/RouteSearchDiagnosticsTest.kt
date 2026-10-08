@@ -54,11 +54,12 @@ class RouteSearchDiagnosticsTest {
         assertEquals(
             "route_search_summary status=cancellation total_ms=5 " +
                 "stages_ms={waypoint_planning:0,search_discovery:0,filtering:0," +
-                "reach_matrices:0,detour_matrices:0} " +
+                "travel_matrices:0} " +
                 "counts={waypoints_attempted:0,waypoints_succeeded:0," +
                 "candidates_discovered:0,candidates_deduped:0,candidates_filtered:0," +
-                "reach_verified:0,detour_verified:0,final_results:4," +
-                "nearby_repository_calls:0,travel_time_repository_calls:0}",
+                "candidates_budgeted:0,reach_verified:0,detour_verified:0,final_results:4," +
+                "nearby_repository_calls:0,travel_time_repository_calls:0," +
+                "matrix_elements_requested:0,partial_failures:0}",
             summary,
         )
         assertFalse(summary.contains("exception"))

@@ -3,17 +3,25 @@ package com.nearbyspot.domain.usecase
 import android.util.Log
 import com.google.android.gms.maps.model.LatLng
 import com.nearbyspot.domain.model.AlongRoutePlace
+import com.nearbyspot.domain.model.GeoPoint
 import com.nearbyspot.domain.model.Place
 import com.nearbyspot.domain.model.RouteFilterSettings
 import com.nearbyspot.domain.model.RouteInfo
+import com.nearbyspot.domain.model.RouteMatrixEntry
+import com.nearbyspot.domain.model.RouteSearchException
+import com.nearbyspot.domain.model.RouteSearchFailure
+import com.nearbyspot.domain.model.RouteSearchProgress
 import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.domain.repository.PlaceRepository
 import com.nearbyspot.util.PolylineUtils
+import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import javax.inject.Inject
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 
 class GetAlongRoutePlacesUseCase @Inject constructor(
     private val repository: PlaceRepository,
@@ -25,141 +33,34 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         currentRouteIndex: Int,
         placeTypes: List<String>,
         filters: RouteFilterSettings,
-    ): List<AlongRoutePlace> = coroutineScope {
-        val diagnostics = RouteSearchDiagnostics { summary -> Log.d(TAG, summary) }
+        onProgress: (RouteSearchProgress) -> Unit = {},
+    ): List<AlongRoutePlace> {
+        val diagnostics = RouteSearchDiagnostics { summary ->
+            runCatching { Log.d(TAG, summary) }
+        }
         var outcome = RouteSearchDiagnostics.Outcome.SUCCESS
-        try {
-            val (aheadPoints, waypoints) = diagnostics.measure(
-                RouteSearchDiagnostics.Stage.WAYPOINT_PLANNING,
-            ) {
-                val points = PolylineUtils.getAheadPoints(routeInfo.decodedPoints, currentRouteIndex)
 
-                if (points.size < 2) return@measure points to emptyList()
-
-                val intervalMeters = when (filters.transportMode) {
-                    TransportMode.DRIVE -> 12_000.0
-                    TransportMode.WALK -> 1_500.0
-                    TransportMode.BICYCLE -> 3_000.0
-                }
-
-                points to PolylineUtils.sampleWaypoints(
-                    points = points,
-                    intervalMeters = intervalMeters,
+        return try {
+            withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
+                search(
+                    routeInfo = routeInfo,
+                    currentLatLng = currentLatLng,
+                    currentRouteIndex = currentRouteIndex,
+                    placeTypes = placeTypes,
+                    filters = filters,
+                    diagnostics = diagnostics,
+                    onProgress = onProgress,
                 )
-            }
-
-            if (aheadPoints.size < 2 || waypoints.isEmpty()) return@coroutineScope emptyList()
-
-            val destination = routeInfo.decodedPoints.last()
-
-            val filteredWaypoints = waypoints.filter { wp ->
-                PolylineUtils.haversineDistance(wp, destination) > SKIP_NEAR_DESTINATION_METERS
-            }
-
-            val searchWaypoints = filteredWaypoints.ifEmpty { waypoints }
-
-            val allPlaces = diagnostics.measure(RouteSearchDiagnostics.Stage.SEARCH_DISCOVERY) {
-                searchWaypoints.map { wp ->
-                    async {
-                        diagnostics.increment(RouteSearchDiagnostics.Counter.WAYPOINTS_ATTEMPTED)
-                        diagnostics.increment(RouteSearchDiagnostics.Counter.NEARBY_REPOSITORY_CALLS)
-                        val result = runCatching {
-                            repository.searchNearbyPlaces(
-                                latitude = wp.latitude,
-                                longitude = wp.longitude,
-                                radiusMeters = SEARCH_RADIUS_METERS,
-                                placeTypes = placeTypes,
-                            )
-                        }
-                        if (result.isSuccess) {
-                            diagnostics.increment(RouteSearchDiagnostics.Counter.WAYPOINTS_SUCCEEDED)
-                        }
-                        result.getOrDefault(emptyList())
-                    }
-                }.awaitAll().flatten()
-            }
-            diagnostics.increment(
-                RouteSearchDiagnostics.Counter.CANDIDATES_DISCOVERED,
-                allPlaces.size,
-            )
-
-            val uniquePlaces = diagnostics.measure(RouteSearchDiagnostics.Stage.FILTERING) {
-                val distinct = allPlaces.distinctBy { it.placeId }
-                diagnostics.increment(
-                    RouteSearchDiagnostics.Counter.CANDIDATES_DEDUPED,
-                    distinct.size,
-                )
-
-                val afterReviewFilter = distinct.filter { it.userRatingCount >= MIN_REVIEW_COUNT }
-                val afterOpenFilter = afterReviewFilter.filter {
-                    matchesOpenNowFilter(it.isOpen, filters.openNowOnly)
-                }
-                val afterDestFilter = afterOpenFilter.filter { place ->
-                    val placeLatLng = LatLng(place.latitude, place.longitude)
-                    PolylineUtils.haversineDistance(placeLatLng, destination) >
-                        SKIP_NEAR_DESTINATION_METERS
-                }
-                afterDestFilter.filter { place ->
-                    filters.maxPriceLevel == null || place.priceLevel == null ||
-                        place.priceLevel <= filters.maxPriceLevel
-                }.also { filtered ->
-                    diagnostics.increment(
-                        RouteSearchDiagnostics.Counter.CANDIDATES_FILTERED,
-                        filtered.size,
-                    )
-                }
-            }
-
-            if (uniquePlaces.isEmpty()) return@coroutineScope emptyList()
-
-            val reachTimes = diagnostics.measure(RouteSearchDiagnostics.Stage.REACH_MATRICES) {
-                computeReachTimes(currentLatLng, uniquePlaces, filters.transportMode, diagnostics)
-            }
-            diagnostics.increment(RouteSearchDiagnostics.Counter.REACH_VERIFIED, reachTimes.size)
-
-            if (reachTimes.isEmpty()) return@coroutineScope emptyList()
-
-            val nearestPoints = reachTimes.map { info ->
-                val placeLatLng = LatLng(info.place.latitude, info.place.longitude)
-                val nearestIdx = PolylineUtils.findNearestPointIndex(aheadPoints, placeLatLng)
-                val globalIdx = nearestIdx + currentRouteIndex
-                val nearestRoutePoint = aheadPoints[nearestIdx]
-                PlaceWithContext(info.place, info.reachSeconds, globalIdx, nearestRoutePoint)
-            }
-
-            val detourInfos = diagnostics.measure(RouteSearchDiagnostics.Stage.DETOUR_MATRICES) {
-                computeDetourTimes(nearestPoints, filters.transportMode, diagnostics)
-            }
-            diagnostics.increment(RouteSearchDiagnostics.Counter.DETOUR_VERIFIED, detourInfos.size)
-
-            val detourFiltered = detourInfos.filter {
-                it.detourSeconds / 60.0 <= filters.maxDetourMinutes
-            }
-
-            return@coroutineScope detourFiltered
-                .map { info ->
-                    val score = computeScore(
-                        rating = info.place.rating,
-                        reviewCount = info.place.userRatingCount,
-                        detourMinutes = info.detourSeconds / 60.0,
-                        maxDetourMinutes = filters.maxDetourMinutes,
-                    )
-                    AlongRoutePlace(
-                        place = info.place,
-                        reachableSeconds = info.reachSeconds,
-                        detourSeconds = info.detourSeconds,
-                        nearestRoutePointIndex = info.nearestIdx,
-                        score = score,
-                    )
-                }
-                .sortedByDescending { it.score }
-                .take(MAX_RESULTS)
-                .also { results ->
-                    diagnostics.increment(RouteSearchDiagnostics.Counter.FINAL_RESULTS, results.size)
-                }
+            } ?: throw RouteSearchException(RouteSearchFailure.TIMED_OUT)
         } catch (cancellation: CancellationException) {
             outcome = RouteSearchDiagnostics.Outcome.CANCELLATION
             throw cancellation
+        } catch (error: RouteSearchException) {
+            outcome = RouteSearchDiagnostics.Outcome.FAILURE
+            throw error
+        } catch (error: Exception) {
+            outcome = RouteSearchDiagnostics.Outcome.FAILURE
+            throw RouteSearchException(RouteSearchFailure.SERVICE_UNAVAILABLE)
         } catch (error: Throwable) {
             outcome = RouteSearchDiagnostics.Outcome.FAILURE
             throw error
@@ -168,95 +69,273 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         }
     }
 
-    private suspend fun computeReachTimes(
+    private suspend fun search(
+        routeInfo: RouteInfo,
         currentLatLng: LatLng,
-        places: List<Place>,
-        mode: TransportMode,
+        currentRouteIndex: Int,
+        placeTypes: List<String>,
+        filters: RouteFilterSettings,
         diagnostics: RouteSearchDiagnostics,
-    ): List<ReachInfo> {
-        val results = mutableListOf<ReachInfo>()
-        for (batch in places.chunked(BATCH_SIZE)) {
-            diagnostics.increment(RouteSearchDiagnostics.Counter.TRAVEL_TIME_REPOSITORY_CALLS)
-            val travelInfos = runCatching {
-                repository.getTravelTimes(
-                    originLat = currentLatLng.latitude,
-                    originLng = currentLatLng.longitude,
-                    destinations = batch,
-                    mode = mode,
-                )
-            }.getOrDefault(emptyList())
+        onProgress: (RouteSearchProgress) -> Unit,
+    ): List<AlongRoutePlace> = coroutineScope {
+        onProgress(RouteSearchProgress.Planning)
+        val anchors = diagnostics.measure(RouteSearchDiagnostics.Stage.WAYPOINT_PLANNING) {
+            PolylineUtils.planStableRouteAnchors(
+                points = routeInfo.decodedPoints,
+                currentRouteIndex = currentRouteIndex,
+                intervalMeters = filters.transportMode.anchorIntervalMeters,
+                destinationExclusionMeters = SKIP_NEAR_DESTINATION_METERS,
+                maxAnchors = MAX_SEARCH_ANCHORS,
+            )
+        }
 
-            val travelMap = travelInfos.associateBy { it.placeId }
-            for (place in batch) {
-                val seconds = travelMap[place.placeId]?.durationSeconds ?: continue
-                results.add(ReachInfo(place, seconds))
+        if (anchors.isEmpty()) {
+            onProgress(RouteSearchProgress.Complete)
+            return@coroutineScope emptyList()
+        }
+
+        var completedAnchors = 0
+        val progressLock = Any()
+        val discoverySemaphore = Semaphore(MAX_CONCURRENT_DISCOVERY_CALLS)
+        onProgress(RouteSearchProgress.SearchingStops(completed = 0, total = anchors.size))
+
+        val discoveries = diagnostics.measure(RouteSearchDiagnostics.Stage.SEARCH_DISCOVERY) {
+            anchors.mapIndexed { anchorIndex, anchor ->
+                async {
+                    discoverySemaphore.withPermit {
+                        diagnostics.increment(RouteSearchDiagnostics.Counter.WAYPOINTS_ATTEMPTED)
+                        diagnostics.increment(RouteSearchDiagnostics.Counter.NEARBY_REPOSITORY_CALLS)
+                        val places = try {
+                            withTimeoutOrNull(ANCHOR_SEARCH_TIMEOUT_MS) {
+                                repository.searchNearbyPlaces(
+                                    latitude = anchor.point.latitude,
+                                    longitude = anchor.point.longitude,
+                                    radiusMeters = SEARCH_RADIUS_METERS,
+                                    placeTypes = placeTypes,
+                                )
+                            } ?: throw AnchorSearchTimeoutException()
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation
+                        } catch (_: Exception) {
+                            diagnostics.increment(RouteSearchDiagnostics.Counter.PARTIAL_FAILURES)
+                            null
+                        }
+
+                        if (places != null) {
+                            diagnostics.increment(RouteSearchDiagnostics.Counter.WAYPOINTS_SUCCEEDED)
+                        }
+                        synchronized(progressLock) {
+                            completedAnchors++
+                            onProgress(
+                                RouteSearchProgress.SearchingStops(completedAnchors, anchors.size),
+                            )
+                        }
+                        AnchorDiscovery(anchorIndex, places)
+                    }
+                }
+            }.awaitAll()
+        }
+
+        if (discoveries.all { it.places == null }) {
+            throw RouteSearchException(RouteSearchFailure.ALL_ANCHORS_FAILED)
+        }
+
+        val destination = routeInfo.decodedPoints.last()
+        diagnostics.increment(
+            RouteSearchDiagnostics.Counter.CANDIDATES_DISCOVERED,
+            discoveries.sumOf { it.places?.size ?: 0 },
+        )
+
+        val candidates = diagnostics.measure(RouteSearchDiagnostics.Stage.FILTERING) {
+            budgetCandidates(discoveries, destination, filters, diagnostics)
+        }
+        if (candidates.isEmpty()) {
+            onProgress(RouteSearchProgress.Complete)
+            return@coroutineScope emptyList()
+        }
+
+        onProgress(RouteSearchProgress.CalculatingTravelTimes)
+        val currentPoint = currentLatLng.toGeoPoint()
+        val destinationPoint = destination.toGeoPoint()
+        val candidatePoints = candidates.map { it.place.toGeoPoint() }
+
+        diagnostics.increment(RouteSearchDiagnostics.Counter.TRAVEL_TIME_REPOSITORY_CALLS, 2)
+        diagnostics.increment(
+            RouteSearchDiagnostics.Counter.MATRIX_ELEMENTS_REQUESTED,
+            candidatePoints.size * 2 + 1,
+        )
+        val (outboundEntries, onwardEntries) = diagnostics.measure(
+            RouteSearchDiagnostics.Stage.TRAVEL_MATRICES,
+        ) {
+            val outbound = async {
+                repository.getRouteMatrix(
+                    origins = listOf(currentPoint),
+                    destinations = candidatePoints + destinationPoint,
+                    mode = filters.transportMode,
+                )
+            }
+            val onward = async {
+                repository.getRouteMatrix(
+                    origins = candidatePoints,
+                    destinations = listOf(destinationPoint),
+                    mode = filters.transportMode,
+                )
+            }
+            outbound.await() to onward.await()
+        }
+
+        val outboundByDestination = outboundEntries
+            .filter { it.originIndex == 0 }
+            .associateBy(RouteMatrixEntry::destinationIndex)
+        val baselineSeconds = outboundByDestination[candidates.size]?.durationSeconds
+            ?: throw RouteSearchException(RouteSearchFailure.DESTINATION_TRAVEL_TIME_UNAVAILABLE)
+        val onwardByOrigin = onwardEntries
+            .filter { it.destinationIndex == 0 }
+            .associateBy(RouteMatrixEntry::originIndex)
+
+        val verifiedLegs = candidates.mapIndexedNotNull { index, candidate ->
+            val reachSeconds = outboundByDestination[index]?.durationSeconds
+                ?: return@mapIndexedNotNull null
+            val onwardSeconds = onwardByOrigin[index]?.durationSeconds
+                ?: return@mapIndexedNotNull null
+            val detourSeconds = computeDetourSeconds(
+                currentToPlaceSeconds = reachSeconds,
+                placeToDestinationSeconds = onwardSeconds,
+                currentToDestinationSeconds = baselineSeconds,
+            )
+            VerifiedLegs(candidate, reachSeconds, detourSeconds)
+        }
+        diagnostics.increment(
+            RouteSearchDiagnostics.Counter.REACH_VERIFIED,
+            candidates.indices.count(outboundByDestination::containsKey),
+        )
+        diagnostics.increment(RouteSearchDiagnostics.Counter.DETOUR_VERIFIED, verifiedLegs.size)
+
+        val eligible = verifiedLegs.mapNotNull { verified ->
+            if (verified.detourSeconds / 60.0 > filters.maxDetourMinutes) {
+                return@mapNotNull null
+            }
+            AlongRoutePlace(
+                place = verified.candidate.place,
+                reachableSeconds = verified.reachSeconds,
+                detourSeconds = verified.detourSeconds,
+                nearestRoutePointIndex = PolylineUtils.findNearestPointIndex(
+                    routeInfo.decodedPoints,
+                    LatLng(
+                        verified.candidate.place.latitude,
+                        verified.candidate.place.longitude,
+                    ),
+                ),
+                score = computeScore(
+                    rating = verified.candidate.place.rating,
+                    reviewCount = verified.candidate.place.userRatingCount,
+                    detourMinutes = verified.detourSeconds / 60.0,
+                    maxDetourMinutes = filters.maxDetourMinutes,
+                ),
+            )
+        }
+
+        eligible
+            .sortedByDescending(AlongRoutePlace::score)
+            .take(MAX_RESULTS)
+            .also { results ->
+                diagnostics.increment(RouteSearchDiagnostics.Counter.FINAL_RESULTS, results.size)
+                onProgress(RouteSearchProgress.Complete)
+            }
+    }
+
+    private fun budgetCandidates(
+        discoveries: List<AnchorDiscovery>,
+        destination: LatLng,
+        filters: RouteFilterSettings,
+        diagnostics: RouteSearchDiagnostics,
+    ): List<AnchoredPlace> {
+        val deduped = discoveries
+            .flatMap { discovery ->
+                discovery.places.orEmpty().map { AnchoredPlace(it, discovery.anchorIndex) }
+            }
+            .distinctBy { it.place.placeId }
+        diagnostics.increment(RouteSearchDiagnostics.Counter.CANDIDATES_DEDUPED, deduped.size)
+
+        val filtered = deduped.filter { candidate ->
+            val place = candidate.place
+            place.userRatingCount >= MIN_REVIEW_COUNT &&
+                matchesOpenNowFilter(place.isOpen, filters.openNowOnly) &&
+                (filters.maxPriceLevel == null || place.priceLevel == null ||
+                    place.priceLevel <= filters.maxPriceLevel) &&
+                PolylineUtils.haversineDistance(
+                    LatLng(place.latitude, place.longitude),
+                    destination,
+                ) > SKIP_NEAR_DESTINATION_METERS
+        }
+        diagnostics.increment(RouteSearchDiagnostics.Counter.CANDIDATES_FILTERED, filtered.size)
+
+        val perAnchor = filtered
+            .groupBy(AnchoredPlace::anchorIndex)
+            .toSortedMap()
+            .values
+            .map { group ->
+                group.sortedWith(candidateQualityComparator).take(MAX_CANDIDATES_PER_ANCHOR)
+            }
+        val diverse = buildList {
+            for (rank in 0 until MAX_CANDIDATES_PER_ANCHOR) {
+                for (group in perAnchor) {
+                    group.getOrNull(rank)?.let(::add)
+                    if (size == MAX_MATRIX_CANDIDATES) return@buildList
+                }
             }
         }
-        return results
+        diagnostics.increment(RouteSearchDiagnostics.Counter.CANDIDATES_BUDGETED, diverse.size)
+        return diverse
     }
 
-    private suspend fun computeDetourTimes(
-        placesWithContext: List<PlaceWithContext>,
-        mode: TransportMode,
-        diagnostics: RouteSearchDiagnostics,
-    ): List<FullTimeInfo> {
-        val results = mutableListOf<FullTimeInfo>()
-        for (batch in placesWithContext.chunked(BATCH_SIZE)) {
-            val travelInfos = batch.flatMap { ctx ->
-                diagnostics.increment(RouteSearchDiagnostics.Counter.TRAVEL_TIME_REPOSITORY_CALLS)
-                runCatching {
-                    repository.getTravelTimes(
-                        originLat = ctx.nearestRoutePoint.latitude,
-                        originLng = ctx.nearestRoutePoint.longitude,
-                        destinations = listOf(ctx.place),
-                        mode = mode,
-                    )
-                }.getOrDefault(emptyList())
-            }
-
-            val travelMap = travelInfos.associateBy { it.placeId }
-            for (ctx in batch) {
-                val oneWayFromRoute = travelMap[ctx.place.placeId]?.durationSeconds ?: (ctx.reachSeconds / 3)
-                val detourSeconds = oneWayFromRoute * 2
-                results.add(
-                    FullTimeInfo(
-                        place = ctx.place,
-                        reachSeconds = ctx.reachSeconds,
-                        detourSeconds = detourSeconds,
-                        nearestIdx = ctx.nearestIdx,
-                    )
-                )
-            }
-        }
-        return results
-    }
-
-    private data class ReachInfo(val place: Place, val reachSeconds: Int) {
-        val reachMinutes: Double get() = reachSeconds / 60.0
-    }
-
-    private data class PlaceWithContext(
-        val place: Place,
-        val reachSeconds: Int,
-        val nearestIdx: Int,
-        val nearestRoutePoint: LatLng,
+    private data class AnchorDiscovery(
+        val anchorIndex: Int,
+        val places: List<Place>?,
     )
 
-    private data class FullTimeInfo(
+    private data class AnchoredPlace(
         val place: Place,
+        val anchorIndex: Int,
+    )
+
+    private data class VerifiedLegs(
+        val candidate: AnchoredPlace,
         val reachSeconds: Int,
         val detourSeconds: Int,
-        val nearestIdx: Int,
     )
+
+    private class AnchorSearchTimeoutException : Exception()
 
     companion object {
         private const val TAG = "AlongRoutePlaces"
         const val MIN_REVIEW_COUNT = 20
         const val MAX_RESULTS = 10
         const val SEARCH_RADIUS_METERS = 2000.0
-        const val BATCH_SIZE = 10
         const val SKIP_NEAR_DESTINATION_METERS = 3000.0
+        const val MAX_SEARCH_ANCHORS = 8
+        const val MAX_CONCURRENT_DISCOVERY_CALLS = 3
+        const val MAX_CANDIDATES_PER_ANCHOR = 3
+        const val MAX_MATRIX_CANDIDATES = 24
+        const val SEARCH_TIMEOUT_MS = 30_000L
+        const val ANCHOR_SEARCH_TIMEOUT_MS = 8_000L
         private const val MIN_RATING = 3.5
+
+        private val candidateQualityComparator =
+            compareByDescending<AnchoredPlace> { it.place.rating }
+                .thenByDescending { it.place.userRatingCount }
+                .thenBy { it.place.placeId }
+
+        fun computeDetourSeconds(
+            currentToPlaceSeconds: Int,
+            placeToDestinationSeconds: Int,
+            currentToDestinationSeconds: Int,
+        ): Int = (
+            currentToPlaceSeconds.toLong() + placeToDestinationSeconds -
+                currentToDestinationSeconds
+            )
+            .coerceIn(0L, Int.MAX_VALUE.toLong())
+            .toInt()
 
         fun computeScore(
             rating: Double,
@@ -265,9 +344,23 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
             maxDetourMinutes: Int,
         ): Double {
             val popularityBase = Math.pow(reviewCount.toDouble(), 0.6)
-            val ratingBoost = 1.0 + ((rating - MIN_RATING) / (5.0 - MIN_RATING)).coerceIn(0.0, 1.0)
-            val detourPenalty = 1.0 - (detourMinutes / (maxDetourMinutes * 2.0)).coerceIn(0.0, 0.4)
+            val ratingBoost = 1.0 +
+                ((rating - MIN_RATING) / (5.0 - MIN_RATING)).coerceIn(0.0, 1.0)
+            val effectiveMaxDetour = maxDetourMinutes.coerceAtLeast(1)
+            val detourPenalty = 1.0 -
+                (detourMinutes / (effectiveMaxDetour * 2.0)).coerceIn(0.0, 0.4)
             return popularityBase * ratingBoost * detourPenalty
         }
     }
 }
+
+private val TransportMode.anchorIntervalMeters: Double
+    get() = when (this) {
+        TransportMode.DRIVE -> 12_000.0
+        TransportMode.WALK -> 1_500.0
+        TransportMode.BICYCLE -> 3_000.0
+    }
+
+private fun LatLng.toGeoPoint() = GeoPoint(latitude, longitude)
+
+private fun Place.toGeoPoint() = GeoPoint(latitude, longitude)

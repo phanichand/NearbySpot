@@ -15,8 +15,10 @@ import com.nearbyspot.data.remote.dto.RouteMatrixOrigin
 import com.nearbyspot.data.remote.dto.RouteMatrixRequest
 import com.nearbyspot.data.remote.dto.Waypoint
 import com.nearbyspot.data.remote.dto.WaypointLocation
+import com.nearbyspot.domain.model.GeoPoint
 import com.nearbyspot.domain.model.Place
 import com.nearbyspot.domain.model.RouteInfo
+import com.nearbyspot.domain.model.RouteMatrixEntry
 import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.domain.model.TravelInfo
 import com.nearbyspot.domain.repository.PlaceRepository
@@ -84,42 +86,39 @@ class PlaceRepositoryImpl @Inject constructor(
         destinations: List<Place>,
         mode: TransportMode,
     ): List<TravelInfo> {
-        val origin = RouteMatrixOrigin(
-            waypoint = Waypoint(
-                location = WaypointLocation(LatLngDto(originLat, originLng))
-            )
+        val entries = getRouteMatrix(
+            origins = listOf(GeoPoint(originLat, originLng)),
+            destinations = destinations.map { GeoPoint(it.latitude, it.longitude) },
+            mode = mode,
         )
-
-        val dests = destinations.map { place ->
-            RouteMatrixDestination(
-                waypoint = Waypoint(
-                    location = WaypointLocation(LatLngDto(place.latitude, place.longitude))
-                )
+        return entries.map { entry ->
+            TravelInfo(
+                placeId = destinations[entry.destinationIndex].placeId,
+                durationSeconds = entry.durationSeconds,
+                distanceMeters = entry.distanceMeters,
             )
         }
+    }
+
+    override suspend fun getRouteMatrix(
+        origins: List<GeoPoint>,
+        destinations: List<GeoPoint>,
+        mode: TransportMode,
+    ): List<RouteMatrixEntry> {
+        if (origins.isEmpty() || destinations.isEmpty()) return emptyList()
 
         val request = RouteMatrixRequest(
-            origins = listOf(origin),
-            destinations = dests,
+            origins = origins.map { point -> point.toRouteMatrixOrigin() },
+            destinations = destinations.map { point -> point.toRouteMatrixDestination() },
             travelMode = mode.routesApiValue,
         )
-
         val response = routesApiService.computeRouteMatrix(request = request)
 
-        return response.mapNotNull { element ->
-            val destIndex = element.destinationIndex ?: return@mapNotNull null
-            if (destIndex >= destinations.size) return@mapNotNull null
-
-            val durationSeconds = element.duration
-                ?.removeSuffix("s")
-                ?.toIntOrNull() ?: return@mapNotNull null
-
-            TravelInfo(
-                placeId = destinations[destIndex].placeId,
-                durationSeconds = durationSeconds,
-                distanceMeters = element.distanceMeters ?: 0,
-            )
-        }
+        return mapRouteMatrixElements(
+            elements = response,
+            originCount = origins.size,
+            destinationCount = destinations.size,
+        )
     }
 
     override suspend fun computeRoute(
@@ -192,6 +191,18 @@ class PlaceRepositoryImpl @Inject constructor(
         return placeDao.observeFavoriteIds()
     }
 }
+
+private fun GeoPoint.toWaypoint(): Waypoint = Waypoint(
+    location = WaypointLocation(LatLngDto(latitude, longitude)),
+)
+
+private fun GeoPoint.toRouteMatrixOrigin(): RouteMatrixOrigin = RouteMatrixOrigin(
+    waypoint = toWaypoint(),
+)
+
+private fun GeoPoint.toRouteMatrixDestination(): RouteMatrixDestination = RouteMatrixDestination(
+    waypoint = toWaypoint(),
+)
 
 internal fun buildPlaceCacheKey(
     latitude: Double,

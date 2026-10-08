@@ -8,8 +8,7 @@ internal class RouteSearchDiagnostics(
         WAYPOINT_PLANNING("waypoint_planning"),
         SEARCH_DISCOVERY("search_discovery"),
         FILTERING("filtering"),
-        REACH_MATRICES("reach_matrices"),
-        DETOUR_MATRICES("detour_matrices"),
+        TRAVEL_MATRICES("travel_matrices"),
     }
 
     enum class Outcome(val key: String) {
@@ -64,11 +63,14 @@ internal class RouteSearchDiagnostics(
         CANDIDATES_DISCOVERED("candidates_discovered"),
         CANDIDATES_DEDUPED("candidates_deduped"),
         CANDIDATES_FILTERED("candidates_filtered"),
+        CANDIDATES_BUDGETED("candidates_budgeted"),
         REACH_VERIFIED("reach_verified"),
         DETOUR_VERIFIED("detour_verified"),
         FINAL_RESULTS("final_results"),
         NEARBY_REPOSITORY_CALLS("nearby_repository_calls"),
         TRAVEL_TIME_REPOSITORY_CALLS("travel_time_repository_calls"),
+        MATRIX_ELEMENTS_REQUESTED("matrix_elements_requested"),
+        PARTIAL_FAILURES("partial_failures"),
     }
 
     private fun nanosToMillis(nanos: Long): Long = nanos / NANOS_PER_MILLISECOND
