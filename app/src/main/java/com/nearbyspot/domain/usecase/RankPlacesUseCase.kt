@@ -20,7 +20,7 @@ class RankPlacesUseCase @Inject constructor() {
         return places
             .mapNotNull { place ->
                 if (place.userRatingCount < MIN_REVIEW_COUNT) return@mapNotNull null
-                if (filters.openNowOnly && place.isOpen == false) return@mapNotNull null
+                if (!matchesOpenNowFilter(place.isOpen, filters.openNowOnly)) return@mapNotNull null
 
                 val travel = travelMap[place.placeId] ?: return@mapNotNull null
                 val travelMinutes = travel.durationMinutes
@@ -80,4 +80,8 @@ class RankPlacesUseCase @Inject constructor() {
             return popularityBase * ratingBoost * proximityBoost
         }
     }
+}
+
+internal fun matchesOpenNowFilter(isOpen: Boolean?, openNowOnly: Boolean): Boolean {
+    return !openNowOnly || isOpen == true
 }

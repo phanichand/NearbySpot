@@ -1,0 +1,105 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 4,
+    "identityHash": "6369d072f2db0a61b64649d43b48f4bc",
+    "entities": [
+      {
+        "tableName": "cached_places",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`placeId` TEXT NOT NULL, `placeJson` TEXT NOT NULL, `cacheKey` TEXT NOT NULL, `lastFetchedEpochMs` INTEGER NOT NULL, PRIMARY KEY(`cacheKey`, `placeId`))",
+        "fields": [
+          {
+            "fieldPath": "placeId",
+            "columnName": "placeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "placeJson",
+            "columnName": "placeJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cacheKey",
+            "columnName": "cacheKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastFetchedEpochMs",
+            "columnName": "lastFetchedEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "cacheKey",
+            "placeId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_cached_places_cacheKey_lastFetchedEpochMs",
+            "unique": false,
+            "columnNames": [
+              "cacheKey",
+              "lastFetchedEpochMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cached_places_cacheKey_lastFetchedEpochMs` ON `${TABLE_NAME}` (`cacheKey`, `lastFetchedEpochMs`)"
+          },
+          {
+            "name": "index_cached_places_lastFetchedEpochMs",
+            "unique": false,
+            "columnNames": [
+              "lastFetchedEpochMs"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cached_places_lastFetchedEpochMs` ON `${TABLE_NAME}` (`lastFetchedEpochMs`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "favorites",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`placeId` TEXT NOT NULL, `placeJson` TEXT NOT NULL, `savedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`placeId`))",
+        "fields": [
+          {
+            "fieldPath": "placeId",
+            "columnName": "placeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "placeJson",
+            "columnName": "placeJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedAtEpochMs",
+            "columnName": "savedAtEpochMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "placeId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6369d072f2db0a61b64649d43b48f4bc')"
+    ]
+  }
+}

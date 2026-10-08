@@ -5,8 +5,8 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [PlaceEntity::class, FavoriteEntity::class],
-    version = 3,
-    exportSchema = false,
+    version = 4,
+    exportSchema = true,
 )
 abstract class NearbySpotDatabase : RoomDatabase() {
     abstract fun placeDao(): PlaceDao

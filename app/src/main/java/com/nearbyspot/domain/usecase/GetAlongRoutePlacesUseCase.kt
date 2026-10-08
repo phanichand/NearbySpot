@@ -92,7 +92,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
 
                 val afterReviewFilter = distinct.filter { it.userRatingCount >= MIN_REVIEW_COUNT }
                 val afterOpenFilter = afterReviewFilter.filter {
-                    !filters.openNowOnly || it.isOpen != false
+                    matchesOpenNowFilter(it.isOpen, filters.openNowOnly)
                 }
                 val afterDestFilter = afterOpenFilter.filter { place ->
                     val placeLatLng = LatLng(place.latitude, place.longitude)

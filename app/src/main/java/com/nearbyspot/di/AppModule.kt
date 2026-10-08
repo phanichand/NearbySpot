@@ -6,6 +6,7 @@ import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.google.gson.Gson
 import com.nearbyspot.BuildConfig
+import com.nearbyspot.data.local.MIGRATION_3_4
 import com.nearbyspot.data.local.NearbySpotDatabase
 import com.nearbyspot.data.local.PlaceDao
 import com.nearbyspot.data.remote.RoutesApiService
@@ -38,19 +39,17 @@ object AppModule {
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
         val apiKeyInterceptor = Interceptor { chain ->
-            val original = chain.request()
-            val url = original.url.newBuilder()
-                .addQueryParameter("key", BuildConfig.MAPS_API_KEY)
-                .build()
-            chain.proceed(original.newBuilder().url(url).build())
+            chain.proceed(
+                RoutesNetworkPolicy.addCredentials(
+                    request = chain.request(),
+                    apiKey = BuildConfig.MAPS_API_KEY,
+                )
+            )
         }
 
         val logging = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) {
-                HttpLoggingInterceptor.Level.BODY
-            } else {
-                HttpLoggingInterceptor.Level.NONE
-            }
+            redactHeader(RoutesNetworkPolicy.API_KEY_HEADER)
+            level = RoutesNetworkPolicy.loggingLevel(BuildConfig.DEBUG)
         }
 
         return OkHttpClient.Builder()
@@ -77,7 +76,7 @@ object AppModule {
             context,
             NearbySpotDatabase::class.java,
             "nearbyspot_db"
-        ).fallbackToDestructiveMigration().build()
+        ).addMigrations(MIGRATION_3_4).build()
     }
 
     @Provides

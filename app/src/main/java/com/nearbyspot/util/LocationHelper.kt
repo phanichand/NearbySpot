@@ -29,10 +29,13 @@ class LocationHelper @Inject constructor(
     private val fusedClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
 
-    fun hasLocationPermission(): Boolean =
-        ContextCompat.checkSelfPermission(
-            context, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
+    fun hasLocationPermission(): Boolean {
+        val permissions = locationPermissions()
+        return LocationPermissionPolicy.hasPermission(
+            hasFinePermission = permissions.hasFine,
+            hasCoarsePermission = permissions.hasCoarse,
+        )
+    }
 
     @Suppress("MissingPermission")
     suspend fun getLastKnownLocation(): Location? {
@@ -46,11 +49,12 @@ class LocationHelper @Inject constructor(
 
     @Suppress("MissingPermission")
     suspend fun getCurrentLocation(): Location {
-        if (!hasLocationPermission()) {
+        val priority = locationPriority()
+        if (priority == null) {
             throw SecurityException("Location permission not granted")
         }
         return suspendCancellableCoroutine { cont ->
-            fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+            fusedClient.getCurrentLocation(priority, null)
                 .addOnSuccessListener { location ->
                     if (location != null) {
                         cont.resume(location)
@@ -64,12 +68,13 @@ class LocationHelper @Inject constructor(
 
     @Suppress("MissingPermission")
     fun observeLocation(intervalMs: Long = 10_000L): Flow<Location> = callbackFlow {
-        if (!hasLocationPermission()) {
+        val priority = locationPriority()
+        if (priority == null) {
             close(SecurityException("Location permission not granted"))
             return@callbackFlow
         }
 
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+        val request = LocationRequest.Builder(priority, intervalMs)
             .setMinUpdateIntervalMillis(intervalMs / 2)
             .build()
 
@@ -85,4 +90,34 @@ class LocationHelper @Inject constructor(
             fusedClient.removeLocationUpdates(callback)
         }
     }
+
+    private fun locationPriority(): Int? {
+        val permissions = locationPermissions()
+        return when (
+            LocationPermissionPolicy.accuracy(
+                hasFinePermission = permissions.hasFine,
+                hasCoarsePermission = permissions.hasCoarse,
+            )
+        ) {
+            LocationAccuracy.HIGH -> Priority.PRIORITY_HIGH_ACCURACY
+            LocationAccuracy.BALANCED -> Priority.PRIORITY_BALANCED_POWER_ACCURACY
+            null -> null
+        }
+    }
+
+    private fun locationPermissions() = LocationPermissions(
+        hasFine = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED,
+        hasCoarse = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED,
+    )
+
+    private data class LocationPermissions(
+        val hasFine: Boolean,
+        val hasCoarse: Boolean,
+    )
 }

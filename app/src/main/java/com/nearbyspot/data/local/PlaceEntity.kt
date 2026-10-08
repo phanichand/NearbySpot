@@ -1,11 +1,18 @@
 package com.nearbyspot.data.local
 
 import androidx.room.Entity
-import androidx.room.PrimaryKey
+import androidx.room.Index
 
-@Entity(tableName = "cached_places")
+@Entity(
+    tableName = "cached_places",
+    primaryKeys = ["cacheKey", "placeId"],
+    indices = [
+        Index(value = ["cacheKey", "lastFetchedEpochMs"]),
+        Index(value = ["lastFetchedEpochMs"]),
+    ],
+)
 data class PlaceEntity(
-    @PrimaryKey val placeId: String,
+    val placeId: String,
     val placeJson: String,
     val cacheKey: String,
     val lastFetchedEpochMs: Long,

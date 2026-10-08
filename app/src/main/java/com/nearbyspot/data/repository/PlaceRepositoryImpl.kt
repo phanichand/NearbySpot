@@ -20,6 +20,7 @@ import com.nearbyspot.domain.model.RouteInfo
 import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.domain.model.TravelInfo
 import com.nearbyspot.domain.repository.PlaceRepository
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -69,10 +70,7 @@ class PlaceRepositoryImpl @Inject constructor(
     }
 
     private fun buildCacheKey(lat: Double, lng: Double, radius: Double, types: List<String>): String {
-        val roundedLat = "%.3f".format(lat)
-        val roundedLng = "%.3f".format(lng)
-        val roundedRadius = (radius / 100).toInt() * 100
-        return "${roundedLat}_${roundedLng}_${roundedRadius}_${types.sorted().joinToString(",")}"
+        return buildPlaceCacheKey(lat, lng, radius, types)
     }
 
     companion object {
@@ -193,4 +191,16 @@ class PlaceRepositoryImpl @Inject constructor(
     override fun observeFavoriteIds(): Flow<List<String>> {
         return placeDao.observeFavoriteIds()
     }
+}
+
+internal fun buildPlaceCacheKey(
+    latitude: Double,
+    longitude: Double,
+    radiusMeters: Double,
+    placeTypes: List<String>,
+): String {
+    val roundedLatitude = String.format(Locale.ROOT, "%.3f", latitude)
+    val roundedLongitude = String.format(Locale.ROOT, "%.3f", longitude)
+    val roundedRadius = (radiusMeters / 100).toInt() * 100
+    return "${roundedLatitude}_${roundedLongitude}_${roundedRadius}_${placeTypes.sorted().joinToString(",")}"
 }

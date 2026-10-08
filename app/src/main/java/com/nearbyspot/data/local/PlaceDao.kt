@@ -7,9 +7,6 @@ import androidx.room.Query
 
 @Dao
 interface PlaceDao {
-    @Query("SELECT * FROM cached_places WHERE placeId = :placeId AND lastFetchedEpochMs > :minEpoch")
-    suspend fun getCachedPlace(placeId: String, minEpoch: Long): PlaceEntity?
-
     @Query("SELECT * FROM cached_places WHERE cacheKey = :cacheKey AND lastFetchedEpochMs > :minEpoch")
     suspend fun getCachedPlaces(cacheKey: String, minEpoch: Long): List<PlaceEntity>
 

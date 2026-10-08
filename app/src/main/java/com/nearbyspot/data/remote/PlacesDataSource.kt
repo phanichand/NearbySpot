@@ -35,15 +35,19 @@ class PlacesDataSource @Inject constructor(
             .setMaxResultCount(MAX_RESULTS)
             .build()
 
-        Log.d(TAG, "searchNearby at ($latitude,$longitude) r=$radiusMeters types=$placeTypes")
+        Log.d(TAG, "Starting nearby search for ${placeTypes.size} place types")
         placesClient.searchNearby(request)
             .addOnSuccessListener { response ->
-                val places = response.places.map { it.toDomainPlace() }
-                Log.d(TAG, "searchNearby returned ${places.size} places")
+                val places = response.places.mapNotNull { it.toDomainPlaceOrNull() }
+                val rejectedCount = response.places.size - places.size
+                Log.d(
+                    TAG,
+                    "Nearby search returned ${places.size} valid places; rejected $rejectedCount invalid results",
+                )
                 cont.resume(places)
             }
             .addOnFailureListener { e ->
-                Log.e(TAG, "Nearby search failed at ($latitude,$longitude): ${e.message}", e)
+                Log.e(TAG, "Nearby search failed (${e.javaClass.simpleName})")
                 cont.resumeWithException(e)
             }
     }
@@ -67,18 +71,27 @@ class PlacesDataSource @Inject constructor(
                 cont.resume(reviews)
             }
             .addOnFailureListener { e ->
-                Log.e(TAG, "Fetch reviews failed", e)
+                Log.e(TAG, "Fetch reviews failed (${e.javaClass.simpleName})")
                 cont.resume(emptyList())
             }
     }
 
     @Suppress("DEPRECATION")
-    private fun GmsPlace.toDomainPlace(): Place {
-        val placeId = id ?: ""
+    private fun GmsPlace.toDomainPlaceOrNull(): Place? {
+        val placeId = id
+        val placeLocation = location
+        val latitude = placeLocation?.latitude
+        val longitude = placeLocation?.longitude
+        if (!PlaceResultValidator.isValid(placeId, latitude, longitude)) return null
+
+        // Validated above. Keep non-null locals below the data-source boundary.
+        val validPlaceId = requireNotNull(placeId)
+        val validLatitude = requireNotNull(latitude)
+        val validLongitude = requireNotNull(longitude)
         val metadatas = photoMetadatas?.take(5) ?: emptyList()
 
         if (metadatas.isNotEmpty()) {
-            photoMetadataCache[placeId] = metadatas
+            photoMetadataCache[validPlaceId] = metadatas
         }
 
         val photoRefs = metadatas.map { meta ->
@@ -91,11 +104,11 @@ class PlacesDataSource @Inject constructor(
         }
 
         return Place(
-            placeId = placeId,
+            placeId = validPlaceId,
             name = displayName ?: "Unknown",
             address = formattedAddress ?: "",
-            latitude = location?.latitude ?: 0.0,
-            longitude = location?.longitude ?: 0.0,
+            latitude = validLatitude,
+            longitude = validLongitude,
             rating = rating ?: 0.0,
             userRatingCount = userRatingsTotal ?: 0,
             priceLevel = priceLevel,

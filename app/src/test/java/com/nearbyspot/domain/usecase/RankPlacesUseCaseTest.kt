@@ -24,6 +24,7 @@ class RankPlacesUseCaseTest {
         rating: Double = 4.0,
         reviewCount: Int = 100,
         priceLevel: Int? = 2,
+        isOpen: Boolean? = true,
     ) = Place(
         placeId = id,
         name = "Place $id",
@@ -33,7 +34,7 @@ class RankPlacesUseCaseTest {
         rating = rating,
         userRatingCount = reviewCount,
         priceLevel = priceLevel,
-        isOpen = true,
+        isOpen = isOpen,
         photoRefs = emptyList(),
         reviews = emptyList(),
         types = listOf("restaurant"),
@@ -168,6 +169,30 @@ class RankPlacesUseCaseTest {
         val result = useCase(places, travels, filters)
 
         assertEquals(3, result.size)
+    }
+
+    @Test
+    fun `open now filter only includes places confirmed open`() {
+        val places = listOf(
+            createPlace("open", isOpen = true),
+            createPlace("closed", isOpen = false),
+            createPlace("unknown", isOpen = null),
+        )
+        val travels = places.map { createTravel(it.placeId, 300) }
+
+        val result = useCase(
+            places,
+            travels,
+            FilterSettings(openNowOnly = true),
+        )
+
+        assertEquals(listOf("open"), result.map { it.place.placeId })
+    }
+
+    @Test
+    fun `disabled open now filter includes unknown and closed status`() {
+        assertTrue(matchesOpenNowFilter(isOpen = null, openNowOnly = false))
+        assertTrue(matchesOpenNowFilter(isOpen = false, openNowOnly = false))
     }
 
     @Test
