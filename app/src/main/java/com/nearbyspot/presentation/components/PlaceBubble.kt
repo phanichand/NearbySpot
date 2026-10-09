@@ -22,6 +22,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,6 +46,7 @@ import kotlin.math.roundToInt
 @Composable
 fun PlaceBubble(
     rankedPlace: RankedPlace,
+    rank: Int,
     isHighlighted: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -55,7 +57,7 @@ fun PlaceBubble(
     val haptic = LocalHapticFeedback.current
 
     val elevation by animateDpAsState(
-        targetValue = if (isHighlighted) 8.dp else 1.dp,
+        targetValue = if (isHighlighted) 2.dp else 0.dp,
         animationSpec = tween(durationMillis = 300),
         label = "bubbleElevation",
     )
@@ -70,14 +72,14 @@ fun PlaceBubble(
         travelMinutes,
     )
     val accessibilityLabel = if (place.address.isBlank()) {
-        placeSummary
+        "${stringResource(R.string.route_rank_accessibility, rank)}, $placeSummary"
     } else {
-        "$placeSummary, ${place.address}"
+        "${stringResource(R.string.route_rank_accessibility, rank)}, $placeSummary, ${place.address}"
     }
 
     Card(
         modifier = modifier
-            .width(252.dp)
+            .width(288.dp)
             .semantics {
                 contentDescription = accessibilityLabel
                 selected = isHighlighted
@@ -107,6 +109,19 @@ fun PlaceBubble(
     ) {
         Column(modifier = Modifier.padding(start = 16.dp, top = 14.dp, end = 10.dp, bottom = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    Text(
+                        text = stringResource(R.string.route_rank, rank),
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
                 Text(
                     text = place.name,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),

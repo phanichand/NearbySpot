@@ -16,6 +16,8 @@
     <string name="home_adjust_filters">Adjust filters</string>
     <string name="home_plan_route">Plan a route</string>
     <string name="home_view_details">View details</string>
+    <string name="home_results_title">Top picks nearby</string>
+    <string name="home_results_subtitle">Tap a card to locate it on the map</string>
     <string name="home_filter_travel_mode">Travel mode</string>
     <string name="home_filter_travel_time">Travel time</string>
     <string name="home_filter_maximum_price">Maximum price</string>

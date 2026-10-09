@@ -63,7 +63,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -127,6 +129,13 @@ fun HomeScreen(
 
     var showDetail by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
+    var topOverlayHeightPx by remember { mutableStateOf(0) }
+    var bottomOverlayHeightPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val mapContentPadding = PaddingValues(
+        top = with(density) { topOverlayHeightPx.toDp() } + 8.dp,
+        bottom = with(density) { bottomOverlayHeightPx.toDp() } + 8.dp,
+    )
 
     if (showDetail && state.selectedPlace != null) {
         val selectedRanked = state.selectedPlace!!
@@ -212,6 +221,7 @@ fun HomeScreen(
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
+            contentPadding = mapContentPadding,
             properties = MapProperties(
                 isMyLocationEnabled = state.locationPermissionGranted,
                 mapStyleOptions = darkMapStyle,
@@ -263,6 +273,7 @@ fun HomeScreen(
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .padding(top = 8.dp)
+                .onSizeChanged { topOverlayHeightPx = it.height }
                 .align(Alignment.TopCenter),
         ) {
             Surface(
@@ -474,19 +485,66 @@ fun HomeScreen(
                         }
                     }
 
-                    is ResultState.Results -> {
+                    is ResultState.Results -> Spacer(Modifier.height(4.dp))
+                    }
+                }
+            }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .onSizeChanged { bottomOverlayHeightPx = it.height },
+        ) {
+            if (state.rankedPlaces.isNotEmpty()) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    shadowElevation = 3.dp,
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 12.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column {
+                                Text(
+                                    text = stringResource(R.string.home_results_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    text = stringResource(R.string.home_results_subtitle),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                text = "${state.rankedPlaces.size}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
                         LazyRow(
                             state = bubbleListState,
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             itemsIndexed(
-                                items = resultState.places,
+                                items = state.rankedPlaces,
                                 key = { _, item -> item.place.placeId },
-                            ) { _, rankedPlace ->
+                            ) { index, rankedPlace ->
                                 PlaceBubble(
                                     rankedPlace = rankedPlace,
-                                    isHighlighted = rankedPlace.place.placeId == state.highlightedPlaceId,
+                                    rank = index + 1,
+                                    isHighlighted = rankedPlace.place.placeId ==
+                                        state.highlightedPlaceId,
                                     onClick = {
                                         viewModel.onPlaceHighlighted(rankedPlace.place.placeId)
                                     },
@@ -498,62 +556,61 @@ fun HomeScreen(
                             }
                         }
                     }
-                    }
                 }
             }
 
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shadowElevation = 6.dp,
-        ) {
-            Row(
+            Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shadowElevation = 6.dp,
             ) {
-                Button(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onNavigateToRoute()
-                    },
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp),
+                        .fillMaxWidth()
+                        .padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Route,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.home_plan_route))
-                }
-
-                AnimatedVisibility(
-                    visible = hasHighlight,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
-                ) {
-                    val highlighted = state.rankedPlaces.find {
-                        it.place.placeId == state.highlightedPlaceId
+                    Button(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onNavigateToRoute()
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Route,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.home_plan_route))
                     }
-                    if (highlighted != null) {
-                        FilledTonalButton(
-                            onClick = {
-                                viewModel.onPlaceSelected(highlighted)
-                                showDetail = true
-                            },
-                            modifier = Modifier.heightIn(min = 48.dp),
-                        ) {
-                            Text(stringResource(R.string.home_view_details))
+
+                    AnimatedVisibility(
+                        visible = hasHighlight,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        val highlighted = state.rankedPlaces.find {
+                            it.place.placeId == state.highlightedPlaceId
+                        }
+                        if (highlighted != null) {
+                            FilledTonalButton(
+                                onClick = {
+                                    viewModel.onPlaceSelected(highlighted)
+                                    showDetail = true
+                                },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) {
+                                Text(stringResource(R.string.home_view_details))
+                            }
                         }
                     }
                 }
