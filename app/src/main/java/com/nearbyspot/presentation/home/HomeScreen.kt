@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -39,6 +41,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +64,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -183,6 +188,15 @@ fun HomeScreen(
     val bubbleListState = rememberLazyListState()
     val hasActiveFilters = state.filterSettings != FilterSettings()
     val hasHighlight = state.highlightedPlaceId != null
+    val nearbySummary = when {
+        state.isLoading -> stringResource(R.string.home_searching_summary)
+        state.rankedPlaces.isEmpty() -> stringResource(R.string.home_empty_summary)
+        else -> pluralStringResource(
+            R.plurals.home_popular_places,
+            state.rankedPlaces.size,
+            state.rankedPlaces.size,
+        )
+    }
 
     val isDarkTheme = isSystemInDarkTheme()
     val context = LocalContext.current
@@ -255,7 +269,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp),
-                shape = MaterialTheme.shapes.large,
+                shape = MaterialTheme.shapes.extraLarge,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 shadowElevation = 6.dp,
             ) {
@@ -263,21 +277,21 @@ fun HomeScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 16.dp, end = 8.dp, top = 8.dp),
+                            .padding(start = 18.dp, end = 8.dp, top = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Explore nearby",
+                                text = stringResource(R.string.home_title),
                                 style = MaterialTheme.typography.titleLarge,
                             )
                             Text(
-                                text = "Pick what sounds good",
+                                text = nearbySummary,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        IconButton(
+                        FilledTonalIconButton(
                             onClick = {
                                 val latitude = state.userLatitude
                                 val longitude = state.userLongitude
@@ -295,7 +309,7 @@ fun HomeScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.MyLocation,
-                                contentDescription = "Center on my location",
+                                contentDescription = stringResource(R.string.home_center_location),
                             )
                         }
                         IconButton(
@@ -306,7 +320,7 @@ fun HomeScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Bookmark,
-                                contentDescription = "Saved places",
+                                contentDescription = stringResource(R.string.home_saved_places),
                             )
                         }
                         IconButton(
@@ -326,13 +340,21 @@ fun HomeScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.FilterList,
-                                        contentDescription = "Toggle filters (active)",
+                                        contentDescription = if (showFilters) {
+                                            stringResource(R.string.home_hide_filters_active)
+                                        } else {
+                                            stringResource(R.string.home_show_filters_active)
+                                        },
                                     )
                                 }
                             } else {
                                 Icon(
                                     imageVector = Icons.Filled.FilterList,
-                                    contentDescription = "Toggle filters",
+                                    contentDescription = if (showFilters) {
+                                        stringResource(R.string.home_hide_filters)
+                                    } else {
+                                        stringResource(R.string.home_show_filters)
+                                    },
                                 )
                             }
                         }
@@ -383,14 +405,26 @@ fun HomeScreen(
                                 .padding(16.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    text = "Finding popular places...",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                            Surface(
+                                shape = MaterialTheme.shapes.extraLarge,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                shadowElevation = 4.dp,
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        strokeWidth = 2.5.dp,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.home_finding_places),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }
@@ -418,20 +452,23 @@ fun HomeScreen(
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 Text(
-                                    text = "No popular places found",
+                                    text = stringResource(R.string.home_no_places_title),
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = "Try a different category or increase the travel time",
+                                    text = stringResource(R.string.home_no_places_body),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
                                 )
                                 Spacer(Modifier.height(16.dp))
-                                OutlinedButton(onClick = { showFilters = true }) {
-                                    Text("Adjust Filters")
+                                OutlinedButton(
+                                    onClick = { showFilters = true },
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                ) {
+                                    Text(stringResource(R.string.home_adjust_filters))
                                 }
                             }
                         }
@@ -441,7 +478,7 @@ fun HomeScreen(
                         LazyRow(
                             state = bubbleListState,
                             contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             itemsIndexed(
                                 items = resultState.places,
@@ -468,21 +505,28 @@ fun HomeScreen(
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp),
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shadowElevation = 6.dp,
         ) {
             Row(
-                modifier = Modifier.padding(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                FilledTonalButton(
+                Button(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onNavigateToRoute()
                     },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Route,
@@ -490,7 +534,7 @@ fun HomeScreen(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Plan a route")
+                    Text(stringResource(R.string.home_plan_route))
                 }
 
                 AnimatedVisibility(
@@ -502,13 +546,14 @@ fun HomeScreen(
                         it.place.placeId == state.highlightedPlaceId
                     }
                     if (highlighted != null) {
-                        Button(
+                        FilledTonalButton(
                             onClick = {
                                 viewModel.onPlaceSelected(highlighted)
                                 showDetail = true
                             },
+                            modifier = Modifier.heightIn(min = 48.dp),
                         ) {
-                            Text("View details")
+                            Text(stringResource(R.string.home_view_details))
                         }
                     }
                 }
@@ -520,7 +565,7 @@ fun HomeScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 100.dp),
+                .padding(bottom = 104.dp),
         )
     }
 }
@@ -560,12 +605,12 @@ private fun PermissionRequiredScreen(onRequestPermission: () -> Unit) {
             )
             Spacer(Modifier.height(24.dp))
             Text(
-                text = "Discover what's nearby",
+                text = stringResource(R.string.permission_title),
                 style = MaterialTheme.typography.headlineMedium,
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "NearbySpot needs your location to find popular restaurants, cafes, and attractions around you.",
+                text = stringResource(R.string.permission_body),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -573,7 +618,9 @@ private fun PermissionRequiredScreen(onRequestPermission: () -> Unit) {
             Spacer(Modifier.height(40.dp))
             Button(
                 onClick = onRequestPermission,
-                modifier = Modifier.width(220.dp),
+                modifier = Modifier
+                    .width(220.dp)
+                    .heightIn(min = 52.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.LocationOn,
@@ -581,7 +628,7 @@ private fun PermissionRequiredScreen(onRequestPermission: () -> Unit) {
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Enable Location")
+                Text(stringResource(R.string.permission_enable))
             }
         }
     }

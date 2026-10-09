@@ -1,6 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NearbySpot</string>
+    <string name="home_title">Explore nearby</string>
+    <string name="home_searching_summary">Finding highly rated places</string>
+    <string name="home_empty_summary">Choose a category to start exploring</string>
+    <string name="home_center_location">Center on my location</string>
+    <string name="home_saved_places">Saved places</string>
+    <string name="home_show_filters">Show filters</string>
+    <string name="home_hide_filters">Hide filters</string>
+    <string name="home_show_filters_active">Show active filters</string>
+    <string name="home_hide_filters_active">Hide active filters</string>
+    <string name="home_finding_places">Finding popular places…</string>
+    <string name="home_no_places_title">No popular places found</string>
+    <string name="home_no_places_body">Try a different category or increase the travel time</string>
+    <string name="home_adjust_filters">Adjust filters</string>
+    <string name="home_plan_route">Plan a route</string>
+    <string name="home_view_details">View details</string>
+    <string name="home_filter_travel_mode">Travel mode</string>
+    <string name="home_filter_travel_time">Travel time</string>
+    <string name="home_filter_maximum_price">Maximum price</string>
+    <string name="home_filter_any_price">Any</string>
+    <string name="home_filter_availability">Availability</string>
+    <string name="home_filter_open_now">Open now</string>
+    <string name="home_filter_sort_by">Sort by</string>
+    <string name="place_summary_description">%1$s, %2$.1f stars, %3$d reviews, %4$d minutes away</string>
+    <string name="permission_title">Discover what’s nearby</string>
+    <string name="permission_body">NearbySpot needs your location to find popular restaurants, cafes, and attractions around you.</string>
+    <string name="permission_enable">Enable location</string>
+    <plurals name="home_popular_places">
+        <item quantity="one">%1$d highly rated place</item>
+        <item quantity="other">%1$d highly rated places</item>
+    </plurals>
     <string name="destination_search_hint">Where are you heading?</string>
     <string name="destination_search_description">Search destination</string>
     <string name="destination_search_clear">Clear destination</string>
@@ -8,6 +38,8 @@
     <string name="destination_search_error">Couldn’t load destinations</string>
     <string name="destination_selection_error">Couldn’t select that destination</string>
     <string name="retry">Retry</string>
+    <string name="back">Back</string>
+    <string name="close">Close</string>
     <string name="route_to_destination">To %1$s</string>
     <string name="route_destination_fallback">destination</string>
     <string name="route_refresh_stops">Refresh route stops</string>
@@ -24,6 +56,11 @@
     <string name="route_filter_maximum_price">Maximum price</string>
     <string name="route_filter_any_price">Any</string>
     <string name="route_filter_open_now">Open now</string>
+    <string name="route_filter_availability">Availability</string>
+    <string name="route_filter_title">Tune your route stops</string>
+    <string name="route_filter_subtitle">Choose how far you’ll go for the right stop</string>
+    <string name="route_open_now">Open now</string>
+    <string name="route_closed_now">Closed now</string>
     <string name="route_rating_and_reviews">%1$s stars, %2$d reviews</string>
     <string name="route_price_level">Price %1$s</string>
     <string name="route_currently_open">Currently open</string>
@@ -31,5 +68,24 @@
     <plurals name="route_verified_stops">
         <item quantity="one">%1$d verified stop</item>
         <item quantity="other">%1$d verified stops</item>
+    </plurals>
+    <string name="saved_title">Saved places</string>
+    <string name="saved_back">Back</string>
+    <string name="saved_loading">Loading saved places</string>
+    <string name="saved_empty_title">No saved places yet</string>
+    <string name="saved_empty_body">Bookmark a place and it will be waiting here when you are ready to explore.</string>
+    <string name="saved_open">Open</string>
+    <string name="saved_closed">Closed</string>
+    <string name="saved_availability_unknown">Hours unavailable</string>
+    <string name="saved_address_unavailable">Address unavailable</string>
+    <string name="saved_remove">Remove %1$s from saved places</string>
+    <string name="saved_place_description">%1$s, %2$.1f stars, %3$d reviews, %4$s, %5$s</string>
+    <plurals name="saved_places_count">
+        <item quantity="one">%1$d place ready for later</item>
+        <item quantity="other">%1$d places ready for later</item>
+    </plurals>
+    <plurals name="saved_reviews">
+        <item quantity="one">%1$d review</item>
+        <item quantity="other">%1$d reviews</item>
     </plurals>
 </resources>

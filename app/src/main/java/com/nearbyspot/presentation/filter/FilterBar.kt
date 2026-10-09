@@ -2,13 +2,13 @@ package com.nearbyspot.presentation.filter
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
@@ -16,20 +16,18 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.nearbyspot.R
 import com.nearbyspot.domain.model.FilterSettings
 import com.nearbyspot.domain.model.SortOption
 import com.nearbyspot.domain.model.TransportMode
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FilterBar(
     filterSettings: FilterSettings,
@@ -40,146 +38,102 @@ fun FilterBar(
     onSortChanged: (SortOption) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Mode",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.width(16.dp))
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
-                TransportMode.entries.forEachIndexed { index, mode ->
-                    SegmentedButton(
-                        selected = filterSettings.transportMode == mode,
-                        onClick = { onTransportModeChanged(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = TransportMode.entries.size,
-                        ),
-                        modifier = Modifier.heightIn(min = 40.dp),
-                        icon = {
-                            Icon(
-                                imageVector = mode.toIcon(),
-                                contentDescription = mode.label,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        },
-                    ) {
-                        Text(mode.label, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
+    Column(
+        modifier = modifier
+            .heightIn(max = 400.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        FilterSection(label = stringResource(R.string.home_filter_travel_mode)) {
+            TransportMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = filterSettings.transportMode == mode,
+                    onClick = { onTransportModeChanged(mode) },
+                    label = { Text(mode.label) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = mode.toIcon(),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Within",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.width(16.dp))
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
-                val timeOptions = listOf(5, 10, 15)
-                timeOptions.forEachIndexed { index, minutes ->
-                    SegmentedButton(
-                        selected = filterSettings.travelTimeMinutes == minutes,
-                        onClick = { onTravelTimeChanged(minutes) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = timeOptions.size,
-                        ),
-                        modifier = Modifier.heightIn(min = 40.dp),
-                    ) {
-                        Text("$minutes min", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
+        FilterSection(label = stringResource(R.string.home_filter_travel_time)) {
+            listOf(5, 10, 15).forEach { minutes ->
+                FilterChip(
+                    selected = filterSettings.travelTimeMinutes == minutes,
+                    onClick = { onTravelTimeChanged(minutes) },
+                    label = { Text("$minutes min") },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Price",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.width(8.dp))
+        FilterSection(label = stringResource(R.string.home_filter_maximum_price)) {
             FilterChip(
                 selected = filterSettings.maxPriceLevel == null,
                 onClick = { onPriceLevelChanged(null) },
-                label = { Text("Any") },
-                modifier = Modifier.heightIn(min = 40.dp),
+                label = { Text(stringResource(R.string.home_filter_any_price)) },
+                modifier = Modifier.heightIn(min = 48.dp),
             )
             listOf(1, 2, 3, 4).forEach { level ->
                 FilterChip(
                     selected = filterSettings.maxPriceLevel == level,
                     onClick = {
                         onPriceLevelChanged(
-                            if (filterSettings.maxPriceLevel == level) null else level
+                            if (filterSettings.maxPriceLevel == level) null else level,
                         )
                     },
                     label = { Text("$".repeat(level)) },
-                    modifier = Modifier.heightIn(min = 40.dp),
+                    modifier = Modifier.heightIn(min = 48.dp),
                 )
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        FilterSection(label = stringResource(R.string.home_filter_availability)) {
             FilterChip(
                 selected = filterSettings.openNowOnly,
                 onClick = { onOpenNowToggled(!filterSettings.openNowOnly) },
-                label = { Text("Open Now") },
-                modifier = Modifier.heightIn(min = 40.dp),
+                label = { Text(stringResource(R.string.home_filter_open_now)) },
+                modifier = Modifier.heightIn(min = 48.dp),
             )
         }
 
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Sort",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.width(16.dp))
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
-                SortOption.entries.forEachIndexed { index, option ->
-                    SegmentedButton(
-                        selected = filterSettings.sortBy == option,
-                        onClick = { onSortChanged(option) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = SortOption.entries.size,
-                        ),
-                        modifier = Modifier.heightIn(min = 40.dp),
-                    ) {
-                        Text(option.label, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
+        FilterSection(label = stringResource(R.string.home_filter_sort_by)) {
+            SortOption.entries.forEach { option ->
+                FilterChip(
+                    selected = filterSettings.sortBy == option,
+                    onClick = { onSortChanged(option) },
+                    label = { Text(option.label) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterSection(
+    label: String,
+    content: @Composable () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            content()
         }
     }
 }

@@ -4,11 +4,8 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,22 +17,23 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,10 +50,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -83,6 +83,7 @@ import com.nearbyspot.presentation.detail.PlaceDetailSheet
 import com.nearbyspot.presentation.util.DurationFormatter
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RouteScreen(
     placesClient: PlacesClient,
@@ -120,6 +121,13 @@ fun RouteScreen(
 
     var showDetail by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
+    var topOverlayHeightPx by remember { mutableStateOf(0) }
+    var bottomOverlayHeightPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val mapContentPadding = PaddingValues(
+        top = with(density) { topOverlayHeightPx.toDp() } + 8.dp,
+        bottom = with(density) { bottomOverlayHeightPx.toDp() } + 8.dp,
+    )
 
     if (showDetail && state.selectedPlace != null) {
         val arPlace = state.selectedPlace!!
@@ -146,8 +154,12 @@ fun RouteScreen(
         )
     }
 
-    LaunchedEffect(state.routeInfo) {
-        val routeInfo = state.routeInfo ?: return@LaunchedEffect
+    LaunchedEffect(state.routeInfo, topOverlayHeightPx, bottomOverlayHeightPx) {
+        val routeInfo = state.routeInfo
+        if (routeInfo == null) {
+            bottomOverlayHeightPx = 0
+            return@LaunchedEffect
+        }
         if (routeInfo.decodedPoints.size >= 2) {
             val bounds = LatLngBounds.builder().apply {
                 routeInfo.decodedPoints.forEach { include(it) }
@@ -189,6 +201,7 @@ fun RouteScreen(
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
+            contentPadding = mapContentPadding,
             properties = MapProperties(
                 isMyLocationEnabled = state.locationPermissionGranted,
                 mapStyleOptions = darkMapStyle,
@@ -207,20 +220,20 @@ fun RouteScreen(
                     val behindPoints = routeInfo.decodedPoints.subList(0, routeIndex + 1)
                     Polyline(
                         points = behindPoints,
-                        color = Color(0xFFB0BEC5),
+                        color = MaterialTheme.colorScheme.outlineVariant,
                         width = 10f,
                     )
 
                     val aheadPoints = routeInfo.decodedPoints.subList(routeIndex, routeInfo.decodedPoints.size)
                     Polyline(
                         points = aheadPoints,
-                        color = Color(0xFF1B6B4A),
+                        color = MaterialTheme.colorScheme.primary,
                         width = 14f,
                     )
                 } else {
                     Polyline(
                         points = routeInfo.decodedPoints,
-                        color = Color(0xFF1B6B4A),
+                        color = MaterialTheme.colorScheme.primary,
                         width = 14f,
                     )
                 }
@@ -282,45 +295,75 @@ fun RouteScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
+                .onSizeChanged { topOverlayHeightPx = it.height }
                 .align(Alignment.TopCenter),
         ) {
-            Row(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                shadowElevation = 8.dp,
             ) {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                Row(
+                    modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                        )
+                    }
+                    DestinationSearchBar(
+                        placesClient = placesClient,
+                        selectedName = state.destinationName,
+                        onDestinationSelected = { result ->
+                            viewModel.onDestinationSelected(
+                                result.name,
+                                result.latLng.latitude,
+                                result.latLng.longitude,
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
                     )
                 }
-                DestinationSearchBar(
-                    placesClient = placesClient,
-                    selectedName = state.destinationName,
-                    onDestinationSelected = { result ->
-                        viewModel.onDestinationSelected(
-                            result.name,
-                            result.latLng.latitude,
-                            result.latLng.longitude,
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
+            }
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                shadowElevation = 4.dp,
+            ) {
+                CategoryChipRow(
+                    selectedCategories = state.selectedCategories,
+                    onCategoryToggled = { viewModel.onCategoryToggled(it) },
+                    modifier = Modifier.padding(vertical = 4.dp),
                 )
             }
 
-            CategoryChipRow(
-                selectedCategories = state.selectedCategories,
-                onCategoryToggled = { viewModel.onCategoryToggled(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .padding(vertical = 4.dp),
-            )
-
             Spacer(Modifier.height(8.dp))
+
+            state.routeInfo?.let { routeInfo ->
+                RouteSummaryCard(
+                    destinationName = state.destinationName,
+                    distanceMeters = routeInfo.distanceMeters,
+                    durationSeconds = routeInfo.durationSeconds,
+                    resultCount = state.alongRoutePlaces.size,
+                    isLoading = state.isLoadingPlaces,
+                    onRefresh = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.onRefreshPlaces()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
 
             AnimatedContent(
                 targetState = RouteResultState.from(state),
@@ -469,38 +512,36 @@ fun RouteScreen(
                 }
             }
 
-            state.routeInfo?.let { routeInfo ->
-                RouteSummaryCard(
-                    destinationName = state.destinationName,
-                    distanceMeters = routeInfo.distanceMeters,
-                    durationSeconds = routeInfo.durationSeconds,
-                    resultCount = state.alongRoutePlaces.size,
-                    isLoading = state.isLoadingPlaces,
-                    onRefresh = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        viewModel.onRefreshPlaces()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                )
-            }
         }
 
-        AnimatedVisibility(
-            visible = showFilters,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(start = 16.dp, top = 132.dp, end = 16.dp),
-            enter = slideInVertically { -it } + fadeIn(),
-            exit = slideOutVertically { -it } + fadeOut(),
-        ) {
-            Surface(
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                shadowElevation = 8.dp,
+        if (showFilters) {
+            ModalBottomSheet(
+                onDismissRequest = { showFilters = false },
             ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.route_filter_title),
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.route_filter_subtitle),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = { showFilters = false }) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.close),
+                        )
+                    }
+                }
                 RouteFilterBar(
                     filterSettings = state.filterSettings,
                     onMaxDetourChanged = viewModel::onMaxDetourChanged,
@@ -509,9 +550,8 @@ fun RouteScreen(
                     onOpenNowToggled = viewModel::onOpenNowToggled,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 360.dp)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .navigationBarsPadding()
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
                 )
             }
         }
@@ -536,7 +576,8 @@ fun RouteScreen(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .onSizeChanged { bottomOverlayHeightPx = it.height },
             )
         }
 

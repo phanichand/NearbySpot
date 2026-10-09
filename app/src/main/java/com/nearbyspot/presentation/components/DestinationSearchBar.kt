@@ -41,6 +41,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -295,6 +297,7 @@ internal fun DestinationSearchField(
     modifier: Modifier = Modifier,
 ) {
     val popupVisible = expanded && (isLoading || errorMessage != null || suggestions.isNotEmpty())
+    val searchDescription = stringResource(R.string.destination_search_description)
 
     BackHandler(enabled = expanded, onBack = onDismiss)
 
@@ -305,7 +308,9 @@ internal fun DestinationSearchField(
             onValueChange = onQueryChanged,
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 56.dp)
                 .onFocusChanged { if (it.isFocused) onFocusGained() }
+                .semantics { contentDescription = searchDescription }
                 .testTag(DESTINATION_SEARCH_FIELD_TAG),
             placeholder = {
                 Text(
@@ -316,7 +321,7 @@ internal fun DestinationSearchField(
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Filled.Search,
-                    contentDescription = stringResource(R.string.destination_search_description),
+                    contentDescription = null,
                     modifier = Modifier.size(20.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -336,15 +341,16 @@ internal fun DestinationSearchField(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { onDismiss() }),
             singleLine = true,
-            shape = MaterialTheme.shapes.large,
+            textStyle = MaterialTheme.typography.bodyLarge,
+            shape = MaterialTheme.shapes.extraLarge,
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                 focusedTextColor = MaterialTheme.colorScheme.onSurface,
                 unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                 cursorColor = MaterialTheme.colorScheme.primary,
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
             ),
         )
 

@@ -3,15 +3,16 @@ package com.nearbyspot.presentation.components
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Info
@@ -28,11 +29,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.nearbyspot.R
 import com.nearbyspot.domain.model.RankedPlace
 import com.nearbyspot.presentation.theme.StarYellow
 import kotlin.math.roundToInt
@@ -57,18 +62,35 @@ fun PlaceBubble(
 
     val priceText = if (place.priceLevel != null) "$".repeat(place.priceLevel) else "—"
 
+    val placeSummary = stringResource(
+        R.string.place_summary_description,
+        place.name,
+        place.rating,
+        place.userRatingCount,
+        travelMinutes,
+    )
+    val accessibilityLabel = if (place.address.isBlank()) {
+        placeSummary
+    } else {
+        "$placeSummary, ${place.address}"
+    }
+
     Card(
         modifier = modifier
-            .widthIn(min = 170.dp, max = 210.dp)
+            .width(252.dp)
             .semantics {
-                contentDescription = "${place.name}, ${place.rating} stars, " +
-                        "${place.userRatingCount} reviews, $travelMinutes minutes away"
+                contentDescription = accessibilityLabel
+                selected = isHighlighted
             }
-            .clickable {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            },
-        shape = MaterialTheme.shapes.large,
+            .selectable(
+                selected = isHighlighted,
+                role = Role.Button,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                },
+            ),
+        shape = MaterialTheme.shapes.extraLarge,
         elevation = CardDefaults.cardElevation(defaultElevation = elevation),
         colors = CardDefaults.cardColors(
             containerColor = if (isHighlighted) {
@@ -83,12 +105,12 @@ fun PlaceBubble(
             BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
         },
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(start = 16.dp, top = 14.dp, end = 10.dp, bottom = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = place.name,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                     color = if (isHighlighted) {
@@ -103,20 +125,40 @@ fun PlaceBubble(
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onLongClick()
                     },
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(48.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Info,
-                        contentDescription = "View details for ${place.name}",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        contentDescription = stringResource(
+                            R.string.route_view_details_for,
+                            place.name,
+                        ),
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            Spacer(Modifier.height(4.dp))
+            if (place.address.isNotBlank()) {
+                Text(
+                    text = place.address,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = 6.dp),
+                )
+                Spacer(Modifier.height(10.dp))
+            } else {
+                Spacer(Modifier.height(6.dp))
+            }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.heightIn(min = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Star,
                     contentDescription = null,
@@ -136,9 +178,12 @@ fun PlaceBubble(
                 )
             }
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(6.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.heightIn(min = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Icon(
                     imageVector = Icons.Filled.AccessTime,
                     contentDescription = null,

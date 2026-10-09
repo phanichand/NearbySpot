@@ -2,34 +2,44 @@ package com.nearbyspot.presentation.route
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
@@ -50,6 +60,7 @@ import com.nearbyspot.presentation.theme.StarYellow
 import com.nearbyspot.presentation.util.DistanceFormatter
 import com.nearbyspot.presentation.util.DurationFormatter
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun RouteSummaryCard(
     destinationName: String,
@@ -69,38 +80,59 @@ internal fun RouteSummaryCard(
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 3.dp,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 4.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
-            modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 10.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 8.dp),
+            verticalAlignment = Alignment.Top,
         ) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Route,
+                    contentDescription = null,
+                    modifier = Modifier.padding(10.dp).size(22.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(
                         R.string.route_to_destination,
                         destinationLabel,
                     ),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = "${DistanceFormatter.format(distanceMeters)} · " +
-                        DurationFormatter.route(durationSeconds),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Spacer(Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    RouteMetricPill(
+                        icon = Icons.Filled.Straighten,
+                        text = DistanceFormatter.format(distanceMeters),
+                    )
+                    RouteMetricPill(
+                        icon = Icons.Filled.Schedule,
+                        text = DurationFormatter.route(durationSeconds),
+                    )
+                }
                 if (resultCount > 0) {
-                    Text(
+                    Spacer(Modifier.height(8.dp))
+                    RouteMetricPill(
+                        icon = Icons.Filled.Verified,
                         text = pluralStringResource(
-                            R.plurals.route_verified_stops,
-                            resultCount,
-                            resultCount,
+                            R.plurals.route_verified_stops, resultCount, resultCount,
                         ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     )
                 }
             }
@@ -148,17 +180,21 @@ internal fun RouteActionDock(
     Surface(
         modifier = modifier
             .navigationBarsPadding()
+            .imePadding()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier
+                .animateContentSize()
+                .padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedButton(
+            FilledTonalButton(
                 onClick = onToggleFilters,
                 modifier = Modifier
                     .then(
@@ -180,11 +216,7 @@ internal fun RouteActionDock(
                 Icon(
                     imageVector = Icons.Filled.FilterList,
                     contentDescription = null,
-                    tint = if (activeFilterCount > 0 || filtersVisible) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
@@ -216,6 +248,7 @@ internal fun RouteActionDock(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun RouteStopCard(
     arPlace: AlongRoutePlace,
@@ -251,6 +284,7 @@ internal fun RouteStopCard(
     Card(
         modifier = modifier
             .width(280.dp)
+            .heightIn(min = 164.dp)
             .semantics(mergeDescendants = true) {
                 selected = isHighlighted
                 role = Role.Button
@@ -262,14 +296,10 @@ internal fun RouteStopCard(
             },
         shape = MaterialTheme.shapes.large,
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isHighlighted) 8.dp else 2.dp,
+            defaultElevation = if (isHighlighted) 8.dp else 3.dp,
         ),
         colors = CardDefaults.cardColors(
-            containerColor = if (isHighlighted) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
         border = if (isHighlighted) {
             BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
@@ -317,17 +347,77 @@ internal fun RouteStopCard(
                     )
                 }
             }
-            Spacer(Modifier.height(6.dp))
+            place.isOpen?.let { isOpen ->
+                Spacer(Modifier.height(6.dp))
+                RouteMetricPill(
+                    text = stringResource(
+                        if (isOpen) R.string.route_open_now else R.string.route_closed_now,
+                    ),
+                    containerColor = if (isOpen) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.errorContainer
+                    },
+                    contentColor = if (isOpen) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                RouteMetricPill(
+                    icon = Icons.Filled.Schedule,
+                    text = aheadLabel,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                RouteMetricPill(
+                    icon = Icons.Filled.Route,
+                    text = detourLabel,
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RouteMetricPill(
+    text: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.extraLarge,
+        color = containerColor,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            icon?.let {
+                Icon(
+                    imageVector = it,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = contentColor,
+                )
+                Spacer(Modifier.width(5.dp))
+            }
             Text(
-                text = aheadLabel,
+                text = text,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = detourLabel,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.tertiary,
+                color = contentColor,
+                maxLines = 1,
             )
         }
     }

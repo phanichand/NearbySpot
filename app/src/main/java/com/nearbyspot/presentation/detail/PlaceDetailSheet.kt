@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +12,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,7 +25,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Star
@@ -37,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -48,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -59,6 +63,7 @@ import com.nearbyspot.domain.model.RankedPlace
 import com.nearbyspot.domain.model.Review
 import com.nearbyspot.presentation.components.RatingBar
 import com.nearbyspot.presentation.theme.StarYellow
+import com.nearbyspot.presentation.util.DistanceFormatter
 import com.nearbyspot.util.PlacePhotoProvider
 import kotlin.math.roundToInt
 
@@ -127,50 +132,38 @@ fun PlaceDetailSheet(
                 PlaceHeroPhoto(placeId = place.placeId, photoProvider = photoProvider)
             }
 
-            Text(
-                text = place.name,
-                style = MaterialTheme.typography.headlineSmall,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            )
-
-            if (onToggleFavorite != null || place.isOpen != null) {
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (onToggleFavorite != null) {
-                        IconButton(onClick = onToggleFavorite) {
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text(
+                    text = place.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (onToggleFavorite != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (isFavorite) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHigh
+                        },
+                    ) {
+                        IconButton(
+                            onClick = onToggleFavorite,
+                            modifier = Modifier.size(48.dp),
+                        ) {
                             Icon(
                                 imageVector = if (isFavorite) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                                 contentDescription = if (isFavorite) "Remove from saved" else "Save place",
-                                tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    if (place.isOpen != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.Circle,
-                                contentDescription = if (place.isOpen) "Currently open" else "Currently closed",
-                                modifier = Modifier.size(10.dp),
-                                tint = if (place.isOpen) {
-                                    MaterialTheme.colorScheme.primary
+                                tint = if (isFavorite) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
                                 } else {
-                                    MaterialTheme.colorScheme.error
-                                },
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = if (place.isOpen) "Open" else "Closed",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (place.isOpen) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.error
+                                    MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                             )
                         }
@@ -180,73 +173,86 @@ fun PlaceDetailSheet(
 
             Spacer(Modifier.height(8.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 RatingBar(rating = place.rating, starSize = 20.dp)
-                Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "${place.rating}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = "(${place.userRatingCount} reviews)",
+                    text = "${place.rating} (${place.userRatingCount} reviews)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.AccessTime,
-                        contentDescription = "Travel time",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = travelLabel,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                if (distanceMeters > 0) {
-                    Spacer(Modifier.height(2.dp))
-                    val distanceText = if (distanceMeters >= 1000) {
-                        "%.1f km".format(distanceMeters / 1000.0)
-                    } else {
-                        "$distanceMeters m"
+            if (place.isOpen != null || place.priceLevel != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    place.isOpen?.let { isOpen ->
+                        DetailBadge(
+                            text = if (isOpen) "Open now" else "Closed now",
+                            containerColor = if (isOpen) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.errorContainer
+                            },
+                            contentColor = if (isOpen) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onErrorContainer
+                            },
+                        )
                     }
-                    Text(
-                        text = distanceText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    place.priceLevel?.let {
+                        DetailBadge(text = "Price ${"$".repeat(it)}")
+                    }
                 }
+                Spacer(Modifier.height(12.dp))
             }
 
-            if (detourLabel != null) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = detourLabel,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
+            if (travelLabel.isNotBlank() || detourLabel != null || distanceMeters > 0) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.AccessTime,
+                            contentDescription = "Travel time",
+                            modifier = Modifier.padding(start = 16.dp).size(22.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.padding(vertical = 14.dp)) {
+                            if (travelLabel.isNotBlank()) {
+                                Text(
+                                    text = travelLabel,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            if (detourLabel != null) {
+                                Text(
+                                    text = detourLabel,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
+                            if (distanceMeters > 0) {
+                                Text(
+                                    text = DistanceFormatter.format(distanceMeters),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
             }
-
-            if (place.priceLevel != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Price: ${"$".repeat(place.priceLevel)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
 
             if (place.address.isNotBlank()) {
                 Row(verticalAlignment = Alignment.Top) {
@@ -284,7 +290,9 @@ fun PlaceDetailSheet(
                         context.startActivity(Intent(Intent.ACTION_VIEW, fallbackUri))
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                 ),
@@ -322,14 +330,34 @@ fun PlaceDetailSheet(
 }
 
 @Composable
+private fun DetailBadge(
+    text: String,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = containerColor,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = contentColor,
+        )
+    }
+}
+
+@Composable
 private fun ReviewCard(review: Review) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -408,7 +436,7 @@ private fun PlaceHeroPhoto(placeId: String, photoProvider: PlacePhotoProvider) {
                     Image(
                         bitmap = bmp.asImageBitmap(),
                         contentDescription = "Place photo",
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                     )
                 }
