@@ -26,4 +26,20 @@ class RoutePresentationLogicTest {
             ),
         )
     }
+
+    @Test
+    fun `route stop fraction is clamped and handles an empty route`() {
+        assertEquals(0f, routeStopFraction(5, 0))
+        assertEquals(0f, routeStopFraction(-2, 10))
+        assertEquals(0.5f, routeStopFraction(5, 10))
+        assertEquals(1f, routeStopFraction(20, 10))
+    }
+
+    @Test
+    fun `route stop zones separate early middle and destination areas`() {
+        assertEquals(RouteStopZone.EARLY, routeStopZone(0.33f))
+        assertEquals(RouteStopZone.MIDDLE, routeStopZone(0.34f))
+        assertEquals(RouteStopZone.MIDDLE, routeStopZone(0.74f))
+        assertEquals(RouteStopZone.DESTINATION, routeStopZone(0.75f))
+    }
 }

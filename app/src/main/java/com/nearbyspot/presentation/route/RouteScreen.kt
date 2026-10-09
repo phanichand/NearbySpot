@@ -196,6 +196,9 @@ fun RouteScreen(
             }.getOrNull()
         } else null
     }
+    val startMarkerTitle = stringResource(R.string.route_marker_start)
+    val destinationMarkerTitle = stringResource(R.string.route_marker_destination)
+    val userMarkerTitle = stringResource(R.string.route_marker_you)
 
     Box(modifier = Modifier.fillMaxSize()) {
         GoogleMap(
@@ -216,38 +219,48 @@ fun RouteScreen(
             state.routeInfo?.let { routeInfo ->
                 val routeIndex = state.currentRoutePointIndex
 
+                Polyline(
+                    points = routeInfo.decodedPoints,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                    width = 20f,
+                    zIndex = 0f,
+                )
+
                 if (routeIndex > 0 && routeIndex < routeInfo.decodedPoints.size) {
                     val behindPoints = routeInfo.decodedPoints.subList(0, routeIndex + 1)
                     Polyline(
                         points = behindPoints,
                         color = MaterialTheme.colorScheme.outlineVariant,
                         width = 10f,
+                        zIndex = 1f,
                     )
 
                     val aheadPoints = routeInfo.decodedPoints.subList(routeIndex, routeInfo.decodedPoints.size)
                     Polyline(
                         points = aheadPoints,
                         color = MaterialTheme.colorScheme.primary,
-                        width = 14f,
+                        width = 12f,
+                        zIndex = 1f,
                     )
                 } else {
                     Polyline(
                         points = routeInfo.decodedPoints,
                         color = MaterialTheme.colorScheme.primary,
-                        width = 14f,
+                        width = 12f,
+                        zIndex = 1f,
                     )
                 }
 
                 if (routeInfo.decodedPoints.isNotEmpty()) {
                     Marker(
                         state = MarkerState(position = routeInfo.decodedPoints.first()),
-                        title = "Start",
+                        title = startMarkerTitle,
                         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
                         zIndex = 2f,
                     )
                     Marker(
                         state = MarkerState(position = routeInfo.decodedPoints.last()),
-                        title = state.destinationName.ifBlank { "Destination" },
+                        title = state.destinationName.ifBlank { destinationMarkerTitle },
                         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
                         zIndex = 2f,
                     )
@@ -256,7 +269,7 @@ fun RouteScreen(
                 state.currentPositionOnRoute?.let { pos ->
                     Marker(
                         state = MarkerState(position = pos),
-                        title = "You",
+                        title = userMarkerTitle,
                         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_CYAN),
                         zIndex = 3f,
                     )
@@ -384,7 +397,7 @@ fun RouteScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = "Enter a destination to find popular stops along your route",
+                                text = stringResource(R.string.route_idle_message),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
@@ -404,15 +417,21 @@ fun RouteScreen(
                                 Spacer(Modifier.height(8.dp))
                                 Text(
                                     text = if (state.isLoadingRoute) {
-                                        "Computing route..."
+                                        stringResource(R.string.route_computing)
                                     } else {
                                         when (val progress = state.routeSearchProgress) {
-                                            RouteSearchProgress.Planning -> "Planning route stops..."
+                                            RouteSearchProgress.Planning ->
+                                                stringResource(R.string.route_planning_stops)
                                             is RouteSearchProgress.SearchingStops ->
-                                                "Searching areas ${progress.completed} of ${progress.total}..."
+                                                stringResource(
+                                                    R.string.route_searching_areas,
+                                                    progress.completed,
+                                                    progress.total,
+                                                )
                                             RouteSearchProgress.CalculatingTravelTimes ->
-                                                "Verifying travel times..."
-                                            RouteSearchProgress.Complete, null -> "Finding stops..."
+                                                stringResource(R.string.route_verifying_times)
+                                            RouteSearchProgress.Complete, null ->
+                                                stringResource(R.string.route_finding_stops)
                                         }
                                     },
                                     style = MaterialTheme.typography.bodySmall,
@@ -445,19 +464,19 @@ fun RouteScreen(
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 Text(
-                                    text = "No popular stops found",
+                                    text = stringResource(R.string.route_empty_title),
                                     style = MaterialTheme.typography.titleSmall,
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = "Try a different category or increase the reachable time",
+                                    text = stringResource(R.string.route_empty_body),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
                                 )
                                 Spacer(Modifier.height(16.dp))
                                 OutlinedButton(onClick = { showFilters = true }) {
-                                    Text("Adjust Filters")
+                                    Text(stringResource(R.string.route_adjust_filters))
                                 }
                             }
                         }
@@ -477,38 +496,19 @@ fun RouteScreen(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "Couldn't search route stops",
+                                    text = stringResource(R.string.route_failure_title),
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 OutlinedButton(onClick = viewModel::onRefreshPlaces) {
-                                    Text("Try again")
+                                    Text(stringResource(R.string.route_try_again))
                                 }
                             }
                         }
                     }
 
-                    is RouteResultState.Results -> {
-                        LazyRow(
-                            state = bubbleListState,
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            itemsIndexed(
-                                items = resultState.places,
-                                key = { _, item -> item.place.placeId },
-                            ) { _, arPlace ->
-                                RouteStopCard(
-                                    arPlace = arPlace,
-                                    isHighlighted = arPlace.place.placeId == state.highlightedPlaceId,
-                                    onClick = {
-                                        viewModel.onPlaceHighlighted(arPlace.place.placeId)
-                                    },
-                                )
-                            }
-                        }
-                    }
+                    is RouteResultState.Results -> Spacer(Modifier.height(4.dp))
                 }
             }
 
@@ -556,29 +556,108 @@ fun RouteScreen(
             }
         }
 
-        if (state.routeInfo != null) {
+        val activeRouteInfo = state.routeInfo
+        if (activeRouteInfo != null) {
             val highlighted = state.alongRoutePlaces.find {
                 it.place.placeId == state.highlightedPlaceId
             }
-            RouteActionDock(
-                filtersVisible = showFilters,
-                activeFilterCount = activeRouteFilterCount(state.filterSettings),
-                highlightedPlaceName = highlighted?.place?.name,
-                onToggleFilters = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    showFilters = !showFilters
-                },
-                onViewDetails = {
-                    highlighted?.let {
-                        viewModel.onPlaceSelected(it)
-                        showDetail = true
-                    }
-                },
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .onSizeChanged { bottomOverlayHeightPx = it.height },
-            )
+            ) {
+                if (state.alongRoutePlaces.isNotEmpty()) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        shadowElevation = 3.dp,
+                    ) {
+                        Column(modifier = Modifier.padding(vertical = 12.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column {
+                                    Text(
+                                        text = stringResource(R.string.route_results_title),
+                                        style = MaterialTheme.typography.titleSmall,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.route_results_subtitle),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    text = "${state.alongRoutePlaces.size}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            LazyRow(
+                                state = bubbleListState,
+                                contentPadding = PaddingValues(horizontal = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                itemsIndexed(
+                                    items = state.alongRoutePlaces,
+                                    key = { _, item -> item.place.placeId },
+                                ) { index, arPlace ->
+                                    val fraction = routeStopFraction(
+                                        arPlace.nearestRoutePointIndex,
+                                        activeRouteInfo.decodedPoints.lastIndex,
+                                    )
+                                    val zoneLabel = when (routeStopZone(fraction)) {
+                                        RouteStopZone.EARLY ->
+                                            stringResource(R.string.route_zone_early)
+                                        RouteStopZone.MIDDLE ->
+                                            stringResource(R.string.route_zone_middle)
+                                        RouteStopZone.DESTINATION -> stringResource(
+                                            R.string.route_zone_destination,
+                                            state.destinationName.ifBlank { destinationMarkerTitle },
+                                        )
+                                    }
+                                    RouteStopCard(
+                                        arPlace = arPlace,
+                                        rank = index + 1,
+                                        routeFraction = fraction,
+                                        routeZoneLabel = zoneLabel,
+                                        isHighlighted = arPlace.place.placeId ==
+                                            state.highlightedPlaceId,
+                                        onClick = {
+                                            viewModel.onPlaceHighlighted(arPlace.place.placeId)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                RouteActionDock(
+                    filtersVisible = showFilters,
+                    activeFilterCount = activeRouteFilterCount(state.filterSettings),
+                    highlightedPlaceName = highlighted?.place?.name,
+                    onToggleFilters = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showFilters = !showFilters
+                    },
+                    onViewDetails = {
+                        highlighted?.let {
+                            viewModel.onPlaceSelected(it)
+                            showDetail = true
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
 
         SnackbarHost(

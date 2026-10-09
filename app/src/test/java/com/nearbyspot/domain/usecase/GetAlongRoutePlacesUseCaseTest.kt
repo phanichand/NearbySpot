@@ -296,6 +296,143 @@ class GetAlongRoutePlacesUseCaseTest {
     }
 
     @Test
+    fun `route search reserves popular results across corridor bands before global fill`() = runTest {
+        val originCluster = (0 until 30).map { index ->
+            place(
+                id = "origin-$index",
+                reviewCount = 30_000 - index,
+                latitude = 0.12,
+                longitude = 0.0,
+            )
+        }
+        val corridorPlaces = listOf(
+            place("corridor-2", reviewCount = 500, latitude = 0.72, longitude = 0.0),
+            place("corridor-3", reviewCount = 400, latitude = 1.32, longitude = 0.0),
+            place("corridor-4", reviewCount = 300, latitude = 1.92, longitude = 0.0),
+        )
+        val destinationPlace = place(
+            "destination",
+            reviewCount = 200,
+            latitude = 2.0,
+            longitude = 0.0,
+        )
+        coEvery { repository.searchAlongRoute("encoded-long-route", any()) } returns
+            originCluster + corridorPlaces
+        coEvery {
+            repository.searchNearbyPlaces(
+                latitude = 2.0,
+                longitude = 0.0,
+                radiusMeters = GetAlongRoutePlacesUseCase.DESTINATION_SEARCH_RADIUS_METERS,
+                placeTypes = any(),
+            )
+        } returns listOf(destinationPlace)
+        var matrixCandidateCount = 0
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            val origins = firstArg<List<GeoPoint>>()
+            val destinations = secondArg<List<GeoPoint>>()
+            if (origins.size == 1 && destinations.size > 1) {
+                matrixCandidateCount = destinations.size - 1
+            }
+            matrixFor(origins, destinations, 600, 500, 1_000)
+        }
+
+        val result = useCase(
+            longEncodedRoute(),
+            ORIGIN,
+            0,
+            listOf("restaurant"),
+            RouteFilterSettings(),
+        )
+
+        assertEquals(GetAlongRoutePlacesUseCase.MAX_MATRIX_CANDIDATES, matrixCandidateCount)
+        assertTrue(result.map { it.place.placeId }.containsAll(
+            listOf("corridor-2", "corridor-3", "corridor-4", "destination"),
+        ))
+        assertEquals(
+            result.map { it.place.userRatingCount }.sortedDescending(),
+            result.map { it.place.userRatingCount },
+        )
+        coVerify(exactly = 1) { repository.searchNearbyPlaces(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `ineligible route result triggers one bounded supplemental band search`() = runTest {
+        coEvery { repository.searchAlongRoute("encoded-long-route", any()) } returns listOf(
+            place("below-minimum", reviewCount = 99, latitude = 0.12, longitude = 0.0),
+            place("corridor-2", reviewCount = 500, latitude = 0.72, longitude = 0.0),
+            place("corridor-3", reviewCount = 400, latitude = 1.32, longitude = 0.0),
+            place("corridor-4", reviewCount = 300, latitude = 1.92, longitude = 0.0),
+        )
+        coEvery {
+            repository.searchNearbyPlaces(any(), any(), any(), any())
+        } coAnswers {
+            val latitude = firstArg<Double>()
+            val radius = thirdArg<Double>()
+            if (radius == GetAlongRoutePlacesUseCase.DESTINATION_SEARCH_RADIUS_METERS) {
+                listOf(place("destination", reviewCount = 200, latitude = 2.0, longitude = 0.0))
+            } else {
+                listOf(place("supplemented", reviewCount = 100, latitude = latitude, longitude = 0.0))
+            }
+        }
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 600, 500, 1_000)
+        }
+
+        val result = useCase(
+            longEncodedRoute(),
+            ORIGIN,
+            0,
+            listOf("restaurant"),
+            RouteFilterSettings(),
+        )
+
+        assertTrue("supplemented" in result.map { it.place.placeId })
+        assertTrue("below-minimum" !in result.map { it.place.placeId })
+        coVerify(exactly = 1) {
+            repository.searchNearbyPlaces(
+                latitude = any(),
+                longitude = any(),
+                radiusMeters = GetAlongRoutePlacesUseCase.SEARCH_RADIUS_METERS,
+                placeTypes = listOf("restaurant"),
+            )
+        }
+    }
+
+    @Test
+    fun `empty encoded route sources retain the full waypoint fallback`() = runTest {
+        coEvery { repository.searchAlongRoute("encoded-long-route", any()) } returns emptyList()
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } coAnswers {
+            val radius = thirdArg<Double>()
+            if (radius == GetAlongRoutePlacesUseCase.DESTINATION_SEARCH_RADIUS_METERS) {
+                emptyList()
+            } else {
+                listOf(place("fallback-${firstArg<Double>()}"))
+            }
+        }
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 600, 500, 1_000)
+        }
+
+        val result = useCase(
+            longEncodedRoute(),
+            ORIGIN,
+            0,
+            listOf("restaurant"),
+            RouteFilterSettings(),
+        )
+
+        assertTrue(result.isNotEmpty())
+        coVerify(exactly = GetAlongRoutePlacesUseCase.MAX_SEARCH_ANCHORS) {
+            repository.searchNearbyPlaces(
+                latitude = any(),
+                longitude = any(),
+                radiusMeters = GetAlongRoutePlacesUseCase.SEARCH_RADIUS_METERS,
+                placeTypes = listOf("restaurant"),
+            )
+        }
+    }
+
+    @Test
     fun `empty filtered pool performs no matrix calls`() = runTest {
         coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } returns
             listOf(place("too-new", reviewCount = 1))
@@ -412,6 +549,8 @@ class GetAlongRoutePlacesUseCaseTest {
         distanceMeters = 222_000,
         decodedPoints = (0..200).map { LatLng(it / 100.0, 0.0) },
     )
+
+    private fun longEncodedRoute() = longRoute().copy(encodedPolyline = "encoded-long-route")
 
     private companion object {
         val ORIGIN = LatLng(0.0, 0.0)

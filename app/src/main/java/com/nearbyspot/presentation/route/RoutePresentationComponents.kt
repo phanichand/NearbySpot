@@ -31,6 +31,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -59,6 +60,7 @@ import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.presentation.theme.StarYellow
 import com.nearbyspot.presentation.util.DistanceFormatter
 import com.nearbyspot.presentation.util.DurationFormatter
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -109,6 +111,11 @@ internal fun RouteSummaryCard(
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = stringResource(R.string.route_popularity_rule),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(Modifier.height(8.dp))
                 FlowRow(
@@ -252,6 +259,9 @@ internal fun RouteActionDock(
 @Composable
 internal fun RouteStopCard(
     arPlace: AlongRoutePlace,
+    rank: Int,
+    routeFraction: Float,
+    routeZoneLabel: String,
     isHighlighted: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -271,7 +281,14 @@ internal fun RouteStopCard(
     val openLabel = place.isOpen?.let {
         stringResource(if (it) R.string.route_currently_open else R.string.route_currently_closed)
     }
+    val positionLabel = stringResource(
+        R.string.route_position_accessibility,
+        routeZoneLabel,
+        (routeFraction.coerceIn(0f, 1f) * 100).roundToInt(),
+    )
     val announcement = listOfNotNull(
+        stringResource(R.string.route_rank_accessibility, rank),
+        routeZoneLabel,
         place.name,
         place.address.takeIf(String::isNotBlank),
         ratingLabel,
@@ -283,7 +300,7 @@ internal fun RouteStopCard(
 
     Card(
         modifier = modifier
-            .width(280.dp)
+            .width(300.dp)
             .heightIn(min = 164.dp)
             .semantics(mergeDescendants = true) {
                 selected = isHighlighted
@@ -296,18 +313,47 @@ internal fun RouteStopCard(
             },
         shape = MaterialTheme.shapes.large,
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isHighlighted) 8.dp else 3.dp,
+            defaultElevation = if (isHighlighted) 2.dp else 0.dp,
         ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = if (isHighlighted) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            },
         ),
         border = if (isHighlighted) {
             BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
         } else {
-            null
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         },
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    Text(
+                        text = stringResource(R.string.route_rank, rank),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
+                Text(
+                    text = routeZoneLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.height(10.dp))
             Text(
                 text = place.name,
                 style = MaterialTheme.typography.titleMedium,
@@ -383,8 +429,39 @@ internal fun RouteStopCard(
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
             }
+            Spacer(Modifier.height(12.dp))
+            LinearProgressIndicator(
+                progress = { routeFraction.coerceIn(0f, 1f) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .semantics {
+                        contentDescription = positionLabel
+                    },
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            )
         }
     }
+}
+
+internal enum class RouteStopZone {
+    EARLY,
+    MIDDLE,
+    DESTINATION,
+}
+
+internal fun routeStopFraction(nearestRoutePointIndex: Int, lastRoutePointIndex: Int): Float =
+    if (lastRoutePointIndex <= 0) {
+        0f
+    } else {
+        (nearestRoutePointIndex.toFloat() / lastRoutePointIndex).coerceIn(0f, 1f)
+    }
+
+internal fun routeStopZone(routeFraction: Float): RouteStopZone = when {
+    routeFraction < 0.34f -> RouteStopZone.EARLY
+    routeFraction < 0.75f -> RouteStopZone.MIDDLE
+    else -> RouteStopZone.DESTINATION
 }
 
 @Composable
