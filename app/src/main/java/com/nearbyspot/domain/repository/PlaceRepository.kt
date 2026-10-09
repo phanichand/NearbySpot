@@ -16,6 +16,11 @@ interface PlaceRepository {
         placeTypes: List<String>,
     ): List<Place>
 
+    suspend fun searchAlongRoute(
+        encodedPolyline: String,
+        placeTypes: List<String>,
+    ): List<Place>
+
     suspend fun getTravelTimes(
         originLat: Double,
         originLng: Double,

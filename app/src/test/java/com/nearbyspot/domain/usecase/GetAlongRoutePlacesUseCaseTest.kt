@@ -255,6 +255,47 @@ class GetAlongRoutePlacesUseCaseTest {
     }
 
     @Test
+    fun `route search keeps destination eateries and orders strictly by review count`() = runTest {
+        val mostReviewedAtDestination = place(
+            id = "destination-favorite",
+            reviewCount = 20_000,
+            rating = 4.1,
+            latitude = 0.20,
+            longitude = 0.0,
+        )
+        coEvery { repository.searchAlongRoute("encoded-route", listOf("restaurant")) } returns listOf(
+            place("higher-rating", reviewCount = 100, rating = 4.9),
+            place("popular", reviewCount = 10_000, rating = 4.3),
+        )
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } returns
+            listOf(mostReviewedAtDestination)
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 600, 500, 1_000)
+        }
+
+        val result = useCase(
+            route().copy(encodedPolyline = "encoded-route"),
+            ORIGIN,
+            0,
+            listOf("restaurant"),
+            RouteFilterSettings(),
+        )
+
+        assertEquals(
+            listOf("destination-favorite", "popular", "higher-rating"),
+            result.map { it.place.placeId },
+        )
+        coVerify(exactly = 1) {
+            repository.searchNearbyPlaces(
+                latitude = 0.20,
+                longitude = 0.0,
+                radiusMeters = GetAlongRoutePlacesUseCase.DESTINATION_SEARCH_RADIUS_METERS,
+                placeTypes = listOf("restaurant"),
+            )
+        }
+    }
+
+    @Test
     fun `empty filtered pool performs no matrix calls`() = runTest {
         coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } returns
             listOf(place("too-new", reviewCount = 1))
@@ -340,6 +381,7 @@ class GetAlongRoutePlacesUseCaseTest {
         reviewCount: Int = 100,
         priceLevel: Int? = 2,
         isOpen: Boolean? = true,
+        rating: Double = 4.5,
         latitude: Double = 0.10,
         longitude: Double = 0.02,
     ) = Place(
@@ -348,7 +390,7 @@ class GetAlongRoutePlacesUseCaseTest {
         address = "Address",
         latitude = latitude,
         longitude = longitude,
-        rating = 4.5,
+        rating = rating,
         userRatingCount = reviewCount,
         priceLevel = priceLevel,
         isOpen = isOpen,

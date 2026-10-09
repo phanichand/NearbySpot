@@ -4,10 +4,13 @@ import android.util.Log
 import android.util.LruCache
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.libraries.places.api.model.CircularBounds
+import com.google.android.libraries.places.api.model.EncodedPolyline
+import com.google.android.libraries.places.api.model.SearchAlongRouteParameters
 import com.google.android.libraries.places.api.model.Place as GmsPlace
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.google.android.libraries.places.api.net.SearchNearbyRequest
+import com.google.android.libraries.places.api.net.SearchByTextRequest
 import com.google.android.libraries.places.api.model.PhotoMetadata
 import com.nearbyspot.domain.model.PhotoRef
 import com.nearbyspot.domain.model.Place
@@ -53,6 +56,42 @@ class PlacesDataSource @Inject constructor(
                 Log.e(TAG, "Nearby search failed (${e.javaClass.simpleName})")
                 cont.resumeWithException(e)
             }
+    }
+
+    suspend fun searchAlongRoute(
+        encodedPolyline: String,
+        placeTypes: List<String>,
+    ): List<Place> {
+        if (encodedPolyline.isBlank() || placeTypes.isEmpty()) return emptyList()
+
+        val routeParameters = SearchAlongRouteParameters.newInstance(
+            EncodedPolyline.newInstance(encodedPolyline),
+        )
+        val places = mutableListOf<Place>()
+        for (placeType in placeTypes.distinct().take(MAX_ROUTE_SEARCH_TYPES)) {
+            val request = SearchByTextRequest.builder(
+                placeType.replace('_', ' '),
+                FIELDS,
+            )
+                .setIncludedType(placeType)
+                .setStrictTypeFiltering(true)
+                .setMaxResultCount(MAX_RESULTS)
+                .setSearchAlongRouteParameters(routeParameters)
+                .build()
+
+            val results = suspendCancellableCoroutine { cont ->
+                placesClient.searchByText(request)
+                    .addOnSuccessListener { response ->
+                        if (!cont.isActive) return@addOnSuccessListener
+                        cont.resume(response.places.mapNotNull { it.toDomainPlaceOrNull() })
+                    }
+                    .addOnFailureListener { error ->
+                        if (cont.isActive) cont.resumeWithException(error)
+                    }
+            }
+            places += results
+        }
+        return places.distinctBy(Place::placeId)
     }
 
     fun getPhotoMetadatas(placeId: String): List<PhotoMetadata> {
@@ -127,6 +166,7 @@ class PlacesDataSource @Inject constructor(
     companion object {
         private const val TAG = "PlacesDataSource"
         private const val MAX_RESULTS = 20
+        private const val MAX_ROUTE_SEARCH_TYPES = 3
         private const val MAX_PHOTO_METADATA_ENTRIES = 100
 
         private val FIELDS = listOf(

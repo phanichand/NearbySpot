@@ -72,6 +72,11 @@ class PlaceRepositoryImpl @Inject constructor(
         return places
     }
 
+    override suspend fun searchAlongRoute(
+        encodedPolyline: String,
+        placeTypes: List<String>,
+    ): List<Place> = placesDataSource.searchAlongRoute(encodedPolyline, placeTypes)
+
     private fun buildCacheKey(lat: Double, lng: Double, radius: Double, types: List<String>): String {
         return buildPlaceCacheKey(lat, lng, radius, types)
     }

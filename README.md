@@ -12,6 +12,7 @@ A smart Android app that recommends nearby popular places based on Google Maps r
 - **Place details**: Ratings, reviews, open status, address, and one-tap navigation to Google Maps
 - **Along-route discovery**: Plan a route and find verified stops without exceeding the selected detour
 - **Quality threshold**: Route stops require at least 100 Google reviews
+- **Popularity-first route results**: Search the full route plus the destination area, then order verified stops by review count
 - **Saved places**: Keep favorites available from a dedicated saved screen
 - **Adaptive design**: Responsive Material 3 surfaces with light and dark themes
 
