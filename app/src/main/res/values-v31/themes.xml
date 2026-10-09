@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.NearbySpot" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowSplashScreenBackground">#E5F7F0</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/nearbyspot_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#E5F7F0</item>
+        <item name="android:navigationBarColor">#0F1512</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>

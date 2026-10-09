@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,6 +68,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -291,6 +293,12 @@ fun HomeScreen(
                             .padding(start = 18.dp, end = 8.dp, top = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Image(
+                            painter = painterResource(R.drawable.nearbyspot_launcher_foreground),
+                            contentDescription = null,
+                            modifier = Modifier.size(56.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = stringResource(R.string.home_title),
@@ -654,13 +662,12 @@ private fun PermissionRequiredScreen(onRequestPermission: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(32.dp),
         ) {
-            Icon(
-                imageVector = Icons.Filled.LocationOn,
+            Image(
+                painter = painterResource(R.drawable.nearbyspot_launcher_foreground),
                 contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(148.dp),
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.permission_title),
                 style = MaterialTheme.typography.headlineMedium,
