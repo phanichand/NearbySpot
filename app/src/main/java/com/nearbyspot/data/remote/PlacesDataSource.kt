@@ -1,6 +1,7 @@
 package com.nearbyspot.data.remote
 
 import android.util.Log
+import android.util.LruCache
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.libraries.places.api.model.CircularBounds
 import com.google.android.libraries.places.api.model.Place as GmsPlace
@@ -38,6 +39,7 @@ class PlacesDataSource @Inject constructor(
         Log.d(TAG, "Starting nearby search for ${placeTypes.size} place types")
         placesClient.searchNearby(request)
             .addOnSuccessListener { response ->
+                if (!cont.isActive) return@addOnSuccessListener
                 val places = response.places.mapNotNull { it.toDomainPlaceOrNull() }
                 val rejectedCount = response.places.size - places.size
                 Log.d(
@@ -47,6 +49,7 @@ class PlacesDataSource @Inject constructor(
                 cont.resume(places)
             }
             .addOnFailureListener { e ->
+                if (!cont.isActive) return@addOnFailureListener
                 Log.e(TAG, "Nearby search failed (${e.javaClass.simpleName})")
                 cont.resumeWithException(e)
             }
@@ -60,6 +63,7 @@ class PlacesDataSource @Inject constructor(
         val request = FetchPlaceRequest.builder(placeId, REVIEW_FIELDS).build()
         placesClient.fetchPlace(request)
             .addOnSuccessListener { response ->
+                if (!cont.isActive) return@addOnSuccessListener
                 val reviews = response.place.reviews?.take(5)?.map { review ->
                     Review(
                         authorName = review.authorAttribution?.name ?: "Anonymous",
@@ -71,6 +75,7 @@ class PlacesDataSource @Inject constructor(
                 cont.resume(reviews)
             }
             .addOnFailureListener { e ->
+                if (!cont.isActive) return@addOnFailureListener
                 Log.e(TAG, "Fetch reviews failed (${e.javaClass.simpleName})")
                 cont.resume(emptyList())
             }
@@ -91,7 +96,7 @@ class PlacesDataSource @Inject constructor(
         val metadatas = photoMetadatas?.take(5) ?: emptyList()
 
         if (metadatas.isNotEmpty()) {
-            photoMetadataCache[validPlaceId] = metadatas
+            photoMetadataCache.put(validPlaceId, metadatas)
         }
 
         val photoRefs = metadatas.map { meta ->
@@ -122,6 +127,7 @@ class PlacesDataSource @Inject constructor(
     companion object {
         private const val TAG = "PlacesDataSource"
         private const val MAX_RESULTS = 20
+        private const val MAX_PHOTO_METADATA_ENTRIES = 100
 
         private val FIELDS = listOf(
             GmsPlace.Field.ID,
@@ -139,6 +145,7 @@ class PlacesDataSource @Inject constructor(
 
         private val REVIEW_FIELDS = listOf(GmsPlace.Field.REVIEWS)
 
-        private val photoMetadataCache = java.util.concurrent.ConcurrentHashMap<String, List<PhotoMetadata>>()
+        private val photoMetadataCache =
+            LruCache<String, List<PhotoMetadata>>(MAX_PHOTO_METADATA_ENTRIES)
     }
 }

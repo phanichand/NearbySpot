@@ -29,6 +29,8 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
+    private const val DEFAULT_API_KEY = "DEFAULT_API_KEY"
+
     @Provides
     @Singleton
     fun providePlacesClient(@ApplicationContext context: Context): PlacesClient {
@@ -42,7 +44,9 @@ object AppModule {
             chain.proceed(
                 RoutesNetworkPolicy.addCredentials(
                     request = chain.request(),
-                    apiKey = BuildConfig.MAPS_API_KEY,
+                    apiKey = BuildConfig.ROUTES_API_KEY
+                        .takeUnless { it == DEFAULT_API_KEY }
+                        ?: BuildConfig.MAPS_API_KEY,
                 )
             )
         }

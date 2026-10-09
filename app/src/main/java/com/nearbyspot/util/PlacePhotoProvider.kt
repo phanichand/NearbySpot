@@ -16,10 +16,13 @@ class PlacePhotoProvider @Inject constructor(
     private val placesClient: PlacesClient,
     private val placesDataSource: PlacesDataSource,
 ) {
-    private val cache = LruCache<String, Bitmap>(MAX_CACHE_ENTRIES)
+    private val cache = object : LruCache<String, Bitmap>(bitmapCacheSizeKb()) {
+        override fun sizeOf(key: String, value: Bitmap): Int =
+            (value.allocationByteCount / BYTES_PER_KILOBYTE).coerceAtLeast(1)
+    }
 
     suspend fun getPhoto(placeId: String, photoIndex: Int = 0, maxWidth: Int = 800): Bitmap? {
-        val cacheKey = "${placeId}_${photoIndex}"
+        val cacheKey = "${placeId}_${photoIndex}_$maxWidth"
         cache.get(cacheKey)?.let { return it }
 
         val metadatas = placesDataSource.getPhotoMetadatas(placeId)
@@ -33,17 +36,26 @@ class PlacePhotoProvider @Inject constructor(
         return suspendCancellableCoroutine { cont ->
             placesClient.fetchPhoto(request)
                 .addOnSuccessListener { response ->
+                    if (!cont.isActive) return@addOnSuccessListener
                     val bitmap = response.bitmap
                     cache.put(cacheKey, bitmap)
                     cont.resume(bitmap)
                 }
                 .addOnFailureListener { e ->
-                    cont.resumeWithException(e)
+                    if (cont.isActive) cont.resumeWithException(e)
                 }
         }
     }
 
     companion object {
-        private const val MAX_CACHE_ENTRIES = 50
+        private const val BYTES_PER_KILOBYTE = 1024
+        private const val MEMORY_FRACTION = 16
+        private const val MIN_CACHE_SIZE_KB = 4 * 1024
+        private const val MAX_CACHE_SIZE_KB = 24 * 1024
+
+        private fun bitmapCacheSizeKb(): Int =
+            (Runtime.getRuntime().maxMemory() / BYTES_PER_KILOBYTE / MEMORY_FRACTION)
+                .coerceIn(MIN_CACHE_SIZE_KB.toLong(), MAX_CACHE_SIZE_KB.toLong())
+                .toInt()
     }
 }

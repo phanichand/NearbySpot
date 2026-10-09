@@ -7,6 +7,21 @@ plugins {
     id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
 }
 
+val releaseStoreFile = providers.environmentVariable("NEARBYSPOT_RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.environmentVariable("NEARBYSPOT_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("NEARBYSPOT_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("NEARBYSPOT_RELEASE_KEY_PASSWORD").orNull
+val releaseSigningValues = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+)
+val hasReleaseSigning = releaseSigningValues.all { !it.isNullOrBlank() }
+check(releaseSigningValues.none { !it.isNullOrBlank() } || hasReleaseSigning) {
+    "Set all four NEARBYSPOT_RELEASE_* signing environment variables, or none of them."
+}
+
 android {
     namespace = "com.nearbyspot"
     compileSdk = 35
@@ -20,13 +35,26 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseStoreFile))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
@@ -53,7 +81,7 @@ ksp {
 
 secrets {
     propertiesFileName = "secrets.properties"
-    defaultPropertiesFileName = "secrets.properties"
+    defaultPropertiesFileName = "local.defaults.properties"
 }
 
 dependencies {

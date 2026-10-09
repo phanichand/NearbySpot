@@ -179,9 +179,9 @@ class RouteViewModel @Inject constructor(
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = "Unable to get your location: ${e.message}")
+                    it.copy(errorMessage = "Unable to get your location. Please try again.")
                 }
             }
         }
@@ -280,11 +280,11 @@ class RouteViewModel @Inject constructor(
                 searchAlongRoute(expectedRouteGeneration = generation)
             } catch (cancellation: CancellationException) {
                 throw cancellation
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 updateForRouteGeneration(generation) {
                     it.copy(
                         isLoadingRoute = false,
-                        errorMessage = "Failed to compute route: ${e.message}",
+                        errorMessage = "Unable to calculate this route. Please try again.",
                     )
                 }
             }

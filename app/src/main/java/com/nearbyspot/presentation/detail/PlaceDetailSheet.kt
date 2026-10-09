@@ -418,7 +418,13 @@ private fun PlaceHeroPhoto(placeId: String, photoProvider: PlacePhotoProvider) {
 
     LaunchedEffect(placeId) {
         loading = true
-        bitmap = runCatching { photoProvider.getPhoto(placeId) }.getOrNull()
+        bitmap = try {
+            photoProvider.getPhoto(placeId)
+        } catch (cancellation: kotlinx.coroutines.CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            null
+        }
         loading = false
     }
 

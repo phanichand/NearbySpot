@@ -46,9 +46,10 @@ class PlaceRepositoryImpl @Inject constructor(
 
         val cached = placeDao.getCachedPlaces(cacheKey, minEpoch)
         if (cached.isNotEmpty()) {
-            return cached.mapNotNull { entity ->
+            val decoded = cached.mapNotNull { entity ->
                 runCatching { gson.fromJson(entity.placeJson, Place::class.java) }.getOrNull()
             }
+            if (decoded.isNotEmpty()) return decoded
         }
 
         val places = placesDataSource.searchNearby(latitude, longitude, radiusMeters, placeTypes)

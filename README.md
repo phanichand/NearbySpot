@@ -7,9 +7,13 @@ A smart Android app that recommends nearby popular places based on Google Maps r
 - **Category-based search**: Restaurants, Cafes, Bakeries, Culture, Attractions, Nature, Shopping, Nightlife, Wellness
 - **Travel-time filtering**: Find places within 5, 10, or 15 minutes
 - **Transport mode**: Walk, Drive, or Bicycle
-- **Smart ranking**: Places ranked by `rating * ln(1 + reviewCount) * timePenalty` -- popular places closer to you rank higher
+- **Smart ranking**: Popularity, rating, and proximity combine to favor well-established places that are still convenient
 - **Price filtering**: Filter by price level ($, $$, $$$, $$$$)
 - **Place details**: Ratings, reviews, open status, address, and one-tap navigation to Google Maps
+- **Along-route discovery**: Plan a route and find verified stops without exceeding the selected detour
+- **Quality threshold**: Route stops require at least 100 Google reviews
+- **Saved places**: Keep favorites available from a dedicated saved screen
+- **Adaptive design**: Responsive Material 3 surfaces with light and dark themes
 
 ## Tech Stack
 
@@ -25,12 +29,32 @@ A smart Android app that recommends nearby popular places based on Google Maps r
    - Places API (New)
    - Routes API
 2. Create an API key restricted to your Android app's SHA-1 fingerprint
-3. Copy `secrets.properties.example` or create `secrets.properties` in the project root:
+3. Create `secrets.properties` in the project root:
    ```
    MAPS_API_KEY=your_api_key_here
+   ROUTES_API_KEY=your_routes_api_key_here
    ```
+   `ROUTES_API_KEY` may be omitted for local development, in which case the app reuses `MAPS_API_KEY`. Production releases should use the backend or dedicated-key strategy described below.
 4. Open the project in Android Studio and sync Gradle
 5. Run on an Android device or emulator (min SDK 26)
+
+`local.defaults.properties` contains a non-functional placeholder so clean checkouts and CI can compile without a real credential. Never replace that tracked value with a real key.
+
+## Verification and release
+
+Run the standard local checks with:
+
+```bash
+./gradlew testDebugUnitTest lintDebug lintRelease assembleDebug assembleRelease bundleRelease compileDebugAndroidTestKotlin
+```
+
+Release builds use R8 and resource shrinking. Distribution signing is intentionally not stored in the repository; see the [release checklist](docs/RELEASE_CHECKLIST.md) for API-key restrictions, device smoke tests, and Play App Signing guidance.
+
+## Privacy and data handling
+
+NearbySpot uses foreground location to search Google Places and calculate Google Routes. Search results are cached on-device for up to 24 hours, including an approximately rounded search location; saved places remain in the local Room database until the app data is cleared or the app is uninstalled. Android cloud backup and device-transfer backup are disabled so this location-derived data is not copied automatically.
+
+Location and route inputs are sent to Google Maps Platform services under Google's applicable terms. A production release should publish a matching privacy policy and Play data-safety declaration. Because a mobile APK cannot keep a REST credential secret, high-volume production deployments should proxy Routes API calls through a controlled backend; otherwise use the separate `ROUTES_API_KEY` with least-privilege API restrictions, tight quotas, and billing alerts.
 
 ## Project Structure
 
@@ -47,6 +71,8 @@ app/src/main/java/com/nearbyspot/
 │   └── usecase/         # GetNearbyPlaces, GetTravelTimes, RankPlaces
 ├── presentation/
 │   ├── home/            # HomeScreen, HomeViewModel
+│   ├── route/           # Route planning and along-route discovery
+│   ├── saved/           # Favorite places
 │   ├── detail/          # PlaceDetailSheet
 │   ├── filter/          # FilterBar
 │   ├── components/      # CategoryChips, PlaceCard, RatingBar

@@ -12,6 +12,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -42,8 +43,12 @@ class LocationHelper @Inject constructor(
         if (!hasLocationPermission()) return null
         return suspendCancellableCoroutine { cont ->
             fusedClient.lastLocation
-                .addOnSuccessListener { location -> cont.resume(location) }
-                .addOnFailureListener { e -> cont.resumeWithException(e) }
+                .addOnSuccessListener { location ->
+                    if (cont.isActive) cont.resume(location)
+                }
+                .addOnFailureListener { e ->
+                    if (cont.isActive) cont.resumeWithException(e)
+                }
         }
     }
 
@@ -54,15 +59,20 @@ class LocationHelper @Inject constructor(
             throw SecurityException("Location permission not granted")
         }
         return suspendCancellableCoroutine { cont ->
-            fusedClient.getCurrentLocation(priority, null)
+            val cancellationTokenSource = CancellationTokenSource()
+            cont.invokeOnCancellation { cancellationTokenSource.cancel() }
+            fusedClient.getCurrentLocation(priority, cancellationTokenSource.token)
                 .addOnSuccessListener { location ->
+                    if (!cont.isActive) return@addOnSuccessListener
                     if (location != null) {
                         cont.resume(location)
                     } else {
                         cont.resumeWithException(Exception("Unable to get current location"))
                     }
                 }
-                .addOnFailureListener { e -> cont.resumeWithException(e) }
+                .addOnFailureListener { e ->
+                    if (cont.isActive) cont.resumeWithException(e)
+                }
         }
     }
 

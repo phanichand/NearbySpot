@@ -14,6 +14,7 @@ import com.nearbyspot.domain.repository.PlaceRepository
 import com.nearbyspot.util.LocationHelper
 import com.nearbyspot.util.PlacePhotoProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,7 @@ class HomeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
     private var searchJob: Job? = null
+    private var searchGeneration = 0L
 
     init {
         viewModelScope.launch {
@@ -143,23 +145,28 @@ class HomeViewModel @Inject constructor(
                     )
                 }
                 searchPlaces()
-            } catch (e: Exception) {
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = "Unable to get your location: ${e.message}")
+                    it.copy(errorMessage = "Unable to get your location. Please try again.")
                 }
             }
         }
     }
 
     private fun searchPlaces() {
+        val generation = ++searchGeneration
+        searchJob?.cancel()
         val state = _uiState.value
         val lat = state.userLatitude ?: return
         val lng = state.userLongitude ?: return
 
-        searchJob?.cancel()
         searchJob = viewModelScope.launch {
             delay(SEARCH_DEBOUNCE_MS)
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            updateForSearchGeneration(generation) {
+                it.copy(isLoading = true, errorMessage = null)
+            }
             try {
                 val combinedTypes = state.selectedCategories.flatMap { it.placeTypes }.distinct()
                 val places = getNearbyPlaces(
@@ -171,7 +178,7 @@ class HomeViewModel @Inject constructor(
                 )
 
                 if (places.isEmpty()) {
-                    _uiState.update {
+                    updateForSearchGeneration(generation) {
                         it.copy(isLoading = false, rankedPlaces = emptyList())
                     }
                     return@launch
@@ -196,19 +203,28 @@ class HomeViewModel @Inject constructor(
 
                 val ranked = rankPlaces(preFiltered, travelInfos, state.filterSettings)
 
-                _uiState.update {
+                updateForSearchGeneration(generation) {
                     it.copy(isLoading = false, rankedPlaces = ranked)
                 }
-            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _uiState.update {
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                updateForSearchGeneration(generation) {
                     it.copy(
                         isLoading = false,
-                        errorMessage = "Search failed: ${e.message}",
+                        errorMessage = "Search is temporarily unavailable. Please try again.",
                     )
                 }
             }
+        }
+    }
+
+    private inline fun updateForSearchGeneration(
+        generation: Long,
+        transform: (HomeUiState) -> HomeUiState,
+    ) {
+        _uiState.update { state ->
+            if (generation == searchGeneration) transform(state) else state
         }
     }
 
