@@ -4,20 +4,11 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,53 +16,36 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material.icons.filled.TravelExplore
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -91,12 +65,29 @@ import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.nearbyspot.R
 import com.nearbyspot.domain.model.AlongRoutePlace
+import com.nearbyspot.domain.model.RouteFilterSettings
 import com.nearbyspot.presentation.components.CategoryChipRow
 import com.nearbyspot.presentation.components.DestinationSearchBar
+import com.nearbyspot.presentation.components.MapHeaderCard
+import com.nearbyspot.presentation.components.MapResultsTray
+import com.nearbyspot.presentation.components.PlaceCard
+import com.nearbyspot.presentation.components.PlaceCarousel
+import com.nearbyspot.presentation.components.StatusMessage
 import com.nearbyspot.presentation.detail.PlaceDetailSheet
-import com.nearbyspot.presentation.theme.StarYellow
+import com.nearbyspot.presentation.filter.FilterSheet
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.math.roundToInt
+
+private const val DEFAULT_ZOOM = 12f
+private const val HIGHLIGHT_ZOOM = 15f
+private const val HIGHLIGHT_ANIMATION_MS = 500
+private const val ROUTE_FIT_ANIMATION_MS = 800
+private const val ROUTE_BOUNDS_PADDING_PX = 100
+private const val ROUTE_AHEAD_WIDTH_PX = 14f
+private const val ROUTE_BEHIND_WIDTH_PX = 10f
+private const val SECONDS_PER_MINUTE = 60
+private const val METERS_PER_KM = 1000.0
 
 @Composable
 fun RouteScreen(
@@ -110,10 +101,10 @@ fun RouteScreen(
     val haptic = LocalHapticFeedback.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
     ) { permissions ->
-        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
-                || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         viewModel.onPermissionResult(granted)
     }
 
@@ -122,7 +113,7 @@ fun RouteScreen(
             arrayOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION,
-            )
+            ),
         )
     }
 
@@ -135,15 +126,17 @@ fun RouteScreen(
 
     var showDetail by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
+    val hasActiveFilters = state.filterSettings != RouteFilterSettings()
 
     if (showDetail && state.selectedPlace != null) {
         val arPlace = state.selectedPlace!!
+        val reachMinutes = arPlace.reachableMinutes.roundToInt()
         PlaceDetailSheet(
             place = arPlace.place,
-            travelMinutes = arPlace.reachableMinutes.roundToInt(),
-            travelLabel = "${arPlace.reachableMinutes.roundToInt()} min away",
+            travelMinutes = reachMinutes,
+            travelLabel = stringResource(R.string.place_minutes_away, reachMinutes),
             distanceMeters = 0,
-            detourLabel = "+${arPlace.detourMinutes.roundToInt()} min detour",
+            detourLabel = stringResource(R.string.place_detour, arPlace.detourMinutes.roundToInt()),
             onDismiss = {
                 showDetail = false
                 viewModel.onPlaceSelected(null)
@@ -155,9 +148,26 @@ fun RouteScreen(
         )
     }
 
+    if (showFilters) {
+        FilterSheet(
+            onDismiss = { showFilters = false },
+            onReset = viewModel::onFiltersReset,
+            resetEnabled = hasActiveFilters,
+        ) {
+            RouteFilterBar(
+                filterSettings = state.filterSettings,
+                onMaxDetourChanged = viewModel::onMaxDetourChanged,
+                onTransportModeChanged = viewModel::onTransportModeChanged,
+                onPriceLevelChanged = viewModel::onPriceLevelChanged,
+                onOpenNowToggled = viewModel::onOpenNowToggled,
+            )
+        }
+    }
+
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(
-            state.userLatLng ?: LatLng(0.0, 0.0), 12f,
+            state.userLatLng ?: LatLng(0.0, 0.0),
+            DEFAULT_ZOOM,
         )
     }
 
@@ -168,8 +178,8 @@ fun RouteScreen(
                 routeInfo.decodedPoints.forEach { include(it) }
             }.build()
             cameraPositionState.animate(
-                CameraUpdateFactory.newLatLngBounds(bounds, 100),
-                durationMs = 800,
+                CameraUpdateFactory.newLatLngBounds(bounds, ROUTE_BOUNDS_PADDING_PX),
+                durationMs = ROUTE_FIT_ANIMATION_MS,
             )
         }
     }
@@ -182,15 +192,14 @@ fun RouteScreen(
             cameraPositionState.animate(
                 CameraUpdateFactory.newLatLngZoom(
                     LatLng(highlighted.place.latitude, highlighted.place.longitude),
-                    15f,
+                    HIGHLIGHT_ZOOM,
                 ),
-                durationMs = 500,
+                durationMs = HIGHLIGHT_ANIMATION_MS,
             )
         }
     }
 
-    val bubbleListState = rememberLazyListState()
-    val hasHighlight = state.highlightedPlaceId != null
+    val carouselState = rememberLazyListState()
 
     val isDarkTheme = isSystemInDarkTheme()
     val context = LocalContext.current
@@ -199,13 +208,29 @@ fun RouteScreen(
             runCatching {
                 MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style_dark)
             }.getOrNull()
-        } else null
+        } else {
+            null
+        }
+    }
+    val routeAheadColor = MaterialTheme.colorScheme.primary
+    val routeBehindColor = MaterialTheme.colorScheme.outline
+    val startLabel = stringResource(R.string.route_start)
+    val destinationFallback = stringResource(R.string.route_destination)
+    val destinationLabel = state.destinationName.ifBlank { destinationFallback }
+    val youLabel = stringResource(R.string.route_you)
+
+    val density = LocalDensity.current
+    var headerHeightPx by remember { mutableIntStateOf(0) }
+    var trayHeightPx by remember { mutableIntStateOf(0) }
+    val mapPadding = with(density) {
+        PaddingValues(top = headerHeightPx.toDp(), bottom = trayHeightPx.toDp())
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
+            contentPadding = mapPadding,
             properties = MapProperties(
                 isMyLocationEnabled = state.locationPermissionGranted,
                 mapStyleOptions = darkMapStyle,
@@ -219,39 +244,37 @@ fun RouteScreen(
         ) {
             state.routeInfo?.let { routeInfo ->
                 val routeIndex = state.currentRoutePointIndex
+                val points = routeInfo.decodedPoints
 
-                if (routeIndex > 0 && routeIndex < routeInfo.decodedPoints.size) {
-                    val behindPoints = routeInfo.decodedPoints.subList(0, routeIndex + 1)
+                if (routeIndex > 0 && routeIndex < points.size) {
                     Polyline(
-                        points = behindPoints,
-                        color = Color(0xFFB0BEC5),
-                        width = 10f,
+                        points = points.subList(0, routeIndex + 1),
+                        color = routeBehindColor,
+                        width = ROUTE_BEHIND_WIDTH_PX,
                     )
-
-                    val aheadPoints = routeInfo.decodedPoints.subList(routeIndex, routeInfo.decodedPoints.size)
                     Polyline(
-                        points = aheadPoints,
-                        color = Color(0xFF1B6B4A),
-                        width = 14f,
+                        points = points.subList(routeIndex, points.size),
+                        color = routeAheadColor,
+                        width = ROUTE_AHEAD_WIDTH_PX,
                     )
                 } else {
                     Polyline(
-                        points = routeInfo.decodedPoints,
-                        color = Color(0xFF1B6B4A),
-                        width = 14f,
+                        points = points,
+                        color = routeAheadColor,
+                        width = ROUTE_AHEAD_WIDTH_PX,
                     )
                 }
 
-                if (routeInfo.decodedPoints.isNotEmpty()) {
+                if (points.isNotEmpty()) {
                     Marker(
-                        state = MarkerState(position = routeInfo.decodedPoints.first()),
-                        title = "Start",
+                        state = MarkerState(position = points.first()),
+                        title = startLabel,
                         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
                         zIndex = 2f,
                     )
                     Marker(
-                        state = MarkerState(position = routeInfo.decodedPoints.last()),
-                        title = state.destinationName.ifBlank { "Destination" },
+                        state = MarkerState(position = points.last()),
+                        title = destinationLabel,
                         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
                         zIndex = 2f,
                     )
@@ -260,21 +283,20 @@ fun RouteScreen(
                 state.currentPositionOnRoute?.let { pos ->
                     Marker(
                         state = MarkerState(position = pos),
-                        title = "You",
+                        title = youLabel,
                         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_CYAN),
                         zIndex = 3f,
                     )
                 }
             }
 
-            state.alongRoutePlaces.forEach { arPlace ->
+            state.alongRoutePlaces.forEachIndexed { index, arPlace ->
                 val isHighlighted = arPlace.place.placeId == state.highlightedPlaceId
                 Marker(
                     state = MarkerState(
-                        position = LatLng(arPlace.place.latitude, arPlace.place.longitude)
+                        position = LatLng(arPlace.place.latitude, arPlace.place.longitude),
                     ),
                     title = arPlace.place.name,
-                    snippet = "${arPlace.reachableMinutes.roundToInt()} min  \u00B7  +${arPlace.detourMinutes.roundToInt()} min detour",
                     icon = if (isHighlighted) {
                         BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
                     } else {
@@ -284,33 +306,30 @@ fun RouteScreen(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         viewModel.onPlaceHighlighted(arPlace.place.placeId)
-                        val idx = state.alongRoutePlaces.indexOf(arPlace)
-                        if (idx >= 0) {
-                            scope.launch { bubbleListState.animateScrollToItem(idx) }
-                        }
+                        scope.launch { carouselState.animateScrollToItem(index) }
                         true
                     },
                 )
             }
         }
 
-        Column(
+        MapHeaderCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
-                .align(Alignment.TopCenter),
+                .align(Alignment.TopCenter)
+                .onSizeChanged { headerHeightPx = it.height },
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 4.dp, end = 12.dp),
+                verticalAlignment = Alignment.Top,
             ) {
-                IconButton(onClick = onNavigateBack) {
+                IconButton(
+                    onClick = onNavigateBack,
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.action_back),
                     )
                 }
                 DestinationSearchBar(
@@ -326,244 +345,107 @@ fun RouteScreen(
                     modifier = Modifier.weight(1f),
                 )
             }
-
+            Spacer(Modifier.height(4.dp))
             CategoryChipRow(
                 selectedCategories = state.selectedCategories,
-                onCategoryToggled = { viewModel.onCategoryToggled(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .padding(vertical = 4.dp),
+                onCategoryToggled = viewModel::onCategoryToggled,
+                modifier = Modifier.fillMaxWidth(),
             )
+        }
 
-            AnimatedVisibility(
-                visible = showFilters,
-                enter = slideInVertically { -it } + fadeIn(),
-                exit = slideOutVertically { -it } + fadeOut(),
-            ) {
-                RouteFilterBar(
-                    filterSettings = state.filterSettings,
-                    onMaxDetourChanged = viewModel::onMaxDetourChanged,
-                    onTransportModeChanged = viewModel::onTransportModeChanged,
-                    onPriceLevelChanged = viewModel::onPriceLevelChanged,
-                    onOpenNowToggled = viewModel::onOpenNowToggled,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+        val resultState = RouteResultState.from(state)
+        MapResultsTray(
+            title = stringResource(
+                if (state.routeInfo == null) R.string.route_idle_title else R.string.route_results_title,
+            ),
+            subtitle = state.routeInfo?.let { routeInfo ->
+                stringResource(
+                    R.string.route_summary,
+                    String.format(Locale.getDefault(), "%.1f", routeInfo.distanceMeters / METERS_PER_KM),
+                    routeInfo.durationSeconds / SECONDS_PER_MINUTE,
                 )
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            AnimatedContent(
-                targetState = RouteResultState.from(state),
-                transitionSpec = { fadeIn(initialAlpha = 0.3f) togetherWith fadeOut() },
-                label = "routeResults",
-            ) { resultState ->
-                when (resultState) {
-                    RouteResultState.Idle -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .background(
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
-                                    shape = MaterialTheme.shapes.large,
-                                )
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "Enter a destination to find popular stops along your route",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
-
-                    RouteResultState.Loading -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    text = if (state.isLoadingRoute) "Computing route..." else "Finding stops...",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-
-                    RouteResultState.Empty -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .background(
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    shape = MaterialTheme.shapes.large,
-                                )
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Filled.SearchOff,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .alpha(0.7f),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text(
-                                    text = "No popular stops found",
-                                    style = MaterialTheme.typography.titleSmall,
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = "Try a different category or increase the reachable time",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                )
-                                Spacer(Modifier.height(16.dp))
-                                OutlinedButton(onClick = { showFilters = true }) {
-                                    Text("Adjust Filters")
-                                }
-                            }
-                        }
-                    }
-
-                    is RouteResultState.Results -> {
-                        LazyRow(
-                            state = bubbleListState,
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            itemsIndexed(
-                                items = resultState.places,
-                                key = { _, item -> item.place.placeId },
-                            ) { _, arPlace ->
-                                RouteStopBubble(
-                                    arPlace = arPlace,
-                                    isHighlighted = arPlace.place.placeId == state.highlightedPlaceId,
-                                    onClick = {
-                                        viewModel.onPlaceHighlighted(arPlace.place.placeId)
-                                    },
-                                    onInfoClick = {
-                                        viewModel.onPlaceSelected(arPlace)
-                                        showDetail = true
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            state.routeInfo?.let { routeInfo ->
-                val durationMin = routeInfo.durationSeconds / 60
-                val distanceKm = "%.1f".format(routeInfo.distanceMeters / 1000.0)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "$distanceKm km  \u00B7  $durationMin min",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    )
-                    Spacer(Modifier.width(8.dp))
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .onSizeChanged { trayHeightPx = it.height },
+            actions = {
+                if (state.routeInfo != null) {
                     IconButton(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             viewModel.onRefreshPlaces()
                         },
-                        modifier = Modifier.size(28.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh places",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.primary,
+                            contentDescription = stringResource(R.string.action_refresh_places),
                         )
                     }
                 }
-            }
-        }
-
-        if (state.routeInfo != null) {
-            if (hasHighlight) {
-                SmallFloatingActionButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        showFilters = !showFilters
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 24.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    elevation = FloatingActionButtonDefaults.elevation(4.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.FilterList,
-                        contentDescription = "Toggle filters",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(20.dp),
-                    )
+                IconButton(onClick = { showFilters = true }) {
+                    BadgedBox(
+                        badge = {
+                            if (hasActiveFilters) {
+                                Badge(containerColor = MaterialTheme.colorScheme.primary)
+                            }
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Tune,
+                            contentDescription = stringResource(
+                                if (hasActiveFilters) R.string.action_filters_active else R.string.action_filters,
+                            ),
+                        )
+                    }
                 }
-            } else {
-                FloatingActionButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        showFilters = !showFilters
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 24.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    elevation = FloatingActionButtonDefaults.elevation(6.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.FilterList,
-                        contentDescription = "Toggle filters",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = hasHighlight,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp),
-            enter = slideInVertically { it } + fadeIn(),
-            exit = slideOutVertically { it } + fadeOut(),
+            },
         ) {
-            val highlighted = state.alongRoutePlaces.find {
-                it.place.placeId == state.highlightedPlaceId
-            }
-            if (highlighted != null) {
-                Button(onClick = {
-                    viewModel.onPlaceSelected(highlighted)
-                    showDetail = true
-                }) {
-                    Text("View Details")
+            AnimatedContent(
+                targetState = resultState,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                contentKey = { it::class },
+                label = "routeResults",
+            ) { target ->
+                when (target) {
+                    RouteResultState.Idle -> StatusMessage(
+                        title = stringResource(R.string.route_idle_body),
+                        icon = Icons.Filled.TravelExplore,
+                    )
+
+                    RouteResultState.Loading -> StatusMessage(
+                        title = stringResource(
+                            if (state.isLoadingRoute) R.string.route_loading_route else R.string.route_loading_places,
+                        ),
+                        isLoading = true,
+                    )
+
+                    RouteResultState.Empty -> StatusMessage(
+                        title = stringResource(R.string.route_empty_title),
+                        body = stringResource(R.string.route_empty_body),
+                        icon = Icons.Filled.SearchOff,
+                        actionLabel = stringResource(R.string.action_adjust_filters),
+                        onAction = { showFilters = true },
+                    )
+
+                    is RouteResultState.Results -> PlaceCarousel(
+                        items = target.places,
+                        itemKey = { it.place.placeId },
+                        state = carouselState,
+                    ) { index, arPlace, itemModifier ->
+                        PlaceCard(
+                            place = arPlace.place,
+                            rank = index + 1,
+                            travelMinutes = arPlace.reachableMinutes.roundToInt(),
+                            detourMinutes = arPlace.detourMinutes.roundToInt(),
+                            isHighlighted = arPlace.place.placeId == state.highlightedPlaceId,
+                            onClick = {
+                                viewModel.onPlaceHighlighted(arPlace.place.placeId)
+                                viewModel.onPlaceSelected(arPlace)
+                                showDetail = true
+                            },
+                            modifier = itemModifier,
+                        )
+                    }
                 }
             }
         }
@@ -572,7 +454,7 @@ fun RouteScreen(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 100.dp),
+                .padding(bottom = with(density) { trayHeightPx.toDp() } + 8.dp),
         )
     }
 }
@@ -591,140 +473,4 @@ private sealed interface RouteResultState {
             else -> Results(state.alongRoutePlaces)
         }
     }
-}
-
-@Composable
-private fun RouteStopBubble(
-    arPlace: AlongRoutePlace,
-    isHighlighted: Boolean,
-    onClick: () -> Unit,
-    onInfoClick: () -> Unit,
-) {
-    val place = arPlace.place
-    val reachMin = arPlace.reachableMinutes.roundToInt()
-    val detourMin = arPlace.detourMinutes.roundToInt()
-    val haptic = LocalHapticFeedback.current
-    val priceText = if (place.priceLevel != null) "$".repeat(place.priceLevel) else "\u2014"
-
-    val elevation by animateDpAsState(
-        targetValue = if (isHighlighted) 12.dp else 2.dp,
-        animationSpec = tween(durationMillis = 300),
-        label = "routeBubbleElevation",
-    )
-
-    Card(
-        modifier = Modifier
-            .width(200.dp)
-            .clickable {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onClick()
-            },
-        shape = MaterialTheme.shapes.large,
-        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isHighlighted) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
-        ),
-        border = if (isHighlighted) {
-            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-        } else null,
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = place.name,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                    color = if (isHighlighted) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                )
-                Spacer(Modifier.width(4.dp))
-                IconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onInfoClick()
-                    },
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Info,
-                        contentDescription = "View details",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Star,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = StarYellow,
-                )
-                Spacer(Modifier.width(3.dp))
-                Text("${place.rating}", style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = "(${formatReviewCount(place.userRatingCount)})",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.AccessTime,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.width(3.dp))
-                Text(
-                    text = "$reachMin min",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "\u00B7",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = "+$detourMin min detour",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-
-            if (priceText != "\u2014") {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = priceText,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-private fun formatReviewCount(count: Int): String = when {
-    count >= 1000 -> "${count / 1000}.${(count % 1000) / 100}k"
-    else -> count.toString()
 }
