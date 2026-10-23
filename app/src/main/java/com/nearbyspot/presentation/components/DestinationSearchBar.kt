@@ -15,13 +15,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +37,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.LatLng
@@ -46,6 +48,7 @@ import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import com.google.android.libraries.places.api.net.PlacesClient
+import com.nearbyspot.R
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -111,7 +114,7 @@ fun DestinationSearchBar(
             modifier = Modifier.fillMaxWidth(),
             placeholder = {
                 Text(
-                    "Where are you heading?",
+                    text = stringResource(R.string.route_search_hint),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             },
@@ -140,7 +143,7 @@ fun DestinationSearchBar(
                 }
             },
             singleLine = true,
-            shape = MaterialTheme.shapes.large,
+            shape = CircleShape,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -148,7 +151,7 @@ fun DestinationSearchBar(
                 unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                 cursorColor = MaterialTheme.colorScheme.primary,
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                unfocusedBorderColor = Color.Transparent,
             ),
         )
 
@@ -161,10 +164,9 @@ fun DestinationSearchBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 4.dp),
-                shape = MaterialTheme.shapes.medium,
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                shape = MaterialTheme.shapes.large,
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 ),
             ) {
                 LazyColumn(
@@ -210,7 +212,6 @@ fun DestinationSearchBar(
                                 }
                             },
                         )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
             }

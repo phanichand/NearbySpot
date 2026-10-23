@@ -1,15 +1,21 @@
 package com.nearbyspot.presentation.detail
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -22,21 +28,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -51,13 +56,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.nearbyspot.R
 import com.nearbyspot.domain.model.Place
 import com.nearbyspot.domain.model.RankedPlace
 import com.nearbyspot.domain.model.Review
+import com.nearbyspot.presentation.components.MetaPill
+import com.nearbyspot.presentation.components.OpenStatusPill
 import com.nearbyspot.presentation.components.RatingBar
+import com.nearbyspot.presentation.components.formatDistance
+import com.nearbyspot.presentation.components.formatPriceLevel
+import com.nearbyspot.presentation.components.formatRating
+import com.nearbyspot.presentation.components.formatReviewCount
 import com.nearbyspot.presentation.theme.StarYellow
 import com.nearbyspot.util.PlacePhotoProvider
 import kotlin.math.roundToInt
@@ -74,10 +88,11 @@ fun PlaceDetailSheet(
     onToggleFavorite: (() -> Unit)? = null,
     onFetchReviews: (suspend (String) -> List<Review>)? = null,
 ) {
+    val travelMinutes = rankedPlace.travelInfo.durationMinutes.roundToInt()
     PlaceDetailSheet(
         place = rankedPlace.place,
-        travelMinutes = rankedPlace.travelInfo.durationMinutes.roundToInt(),
-        travelLabel = "${rankedPlace.travelInfo.durationMinutes.roundToInt()} min away",
+        travelMinutes = travelMinutes,
+        travelLabel = stringResource(R.string.place_minutes_away, travelMinutes),
         distanceMeters = rankedPlace.travelInfo.distanceMeters,
         onDismiss = onDismiss,
         photoProvider = photoProvider,
@@ -87,7 +102,7 @@ fun PlaceDetailSheet(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PlaceDetailSheet(
     place: Place,
@@ -103,6 +118,7 @@ fun PlaceDetailSheet(
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val colors = MaterialTheme.colorScheme
 
     var reviews by remember(place.placeId) { mutableStateOf(place.reviews) }
     LaunchedEffect(place.placeId) {
@@ -124,192 +140,156 @@ fun PlaceDetailSheet(
                 .padding(bottom = 24.dp),
         ) {
             if (photoProvider != null && place.photoRefs.isNotEmpty()) {
-                PlaceHeroPhoto(placeId = place.placeId, photoProvider = photoProvider)
-                Spacer(Modifier.height(12.dp))
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = place.name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.weight(1f),
+                PlaceHeroPhoto(
+                    placeId = place.placeId,
+                    placeName = place.name,
+                    photoProvider = photoProvider,
                 )
-                if (onToggleFavorite != null) {
-                    IconButton(onClick = onToggleFavorite) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                            contentDescription = if (isFavorite) "Remove from saved" else "Save place",
-                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                if (place.isOpen != null) {
-                    Spacer(Modifier.width(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.Circle,
-                            contentDescription = if (place.isOpen) "Currently open" else "Currently closed",
-                            modifier = Modifier.size(10.dp),
-                            tint = if (place.isOpen) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            },
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = if (place.isOpen) "Open" else "Closed",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (place.isOpen) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            },
-                        )
-                    }
-                }
             }
 
-            Spacer(Modifier.height(8.dp))
-
+            Text(
+                text = place.name,
+                style = MaterialTheme.typography.headlineSmall,
+                color = colors.onSurface,
+            )
+            Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                RatingBar(rating = place.rating, starSize = 20.dp)
+                RatingBar(rating = place.rating, starSize = 18.dp)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "${place.rating}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = formatRating(place.rating),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.onSurface,
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    text = "(${place.userRatingCount} reviews)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = pluralStringResource(
+                        R.plurals.place_review_count,
+                        place.userRatingCount,
+                        formatReviewCount(place.userRatingCount),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.AccessTime,
-                    contentDescription = "Travel time",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = travelLabel,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                if (distanceMeters > 0) {
-                    Spacer(Modifier.width(12.dp))
-                    val distanceText = if (distanceMeters >= 1000) {
-                        "%.1f km".format(distanceMeters / 1000.0)
-                    } else {
-                        "$distanceMeters m"
-                    }
-                    Text(
-                        text = distanceText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (travelLabel.isNotBlank()) {
+                    MetaPill(
+                        text = travelLabel,
+                        icon = Icons.Filled.AccessTime,
+                        containerColor = colors.primaryContainer,
+                        contentColor = colors.onPrimaryContainer,
                     )
+                }
+                if (distanceMeters > 0) {
+                    MetaPill(text = formatDistance(distanceMeters), icon = Icons.Filled.Straighten)
+                }
+                if (detourLabel != null) {
+                    MetaPill(
+                        text = detourLabel,
+                        icon = Icons.Filled.Route,
+                        containerColor = colors.tertiaryContainer,
+                        contentColor = colors.onTertiaryContainer,
+                    )
+                }
+                if (place.priceLevel != null) {
+                    MetaPill(text = formatPriceLevel(place.priceLevel))
+                }
+                if (place.isOpen != null) {
+                    OpenStatusPill(isOpen = place.isOpen)
                 }
             }
 
-            if (detourLabel != null) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = detourLabel,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-
-            if (place.priceLevel != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Price: ${"$".repeat(place.priceLevel)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
 
             Row(verticalAlignment = Alignment.Top) {
                 Icon(
                     imageVector = Icons.Filled.Place,
-                    contentDescription = "Address",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .size(16.dp),
+                    tint = colors.onSurfaceVariant,
                 )
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(6.dp))
                 Text(
                     text = place.address,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = colors.onSurfaceVariant,
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
 
-            Button(
-                onClick = {
-                    val gmmUri = Uri.parse(
-                        "google.navigation:q=${place.latitude},${place.longitude}"
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = { launchNavigation(context, place) },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(vertical = 14.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Navigation,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
                     )
-                    val mapsIntent = Intent(Intent.ACTION_VIEW, gmmUri).apply {
-                        setPackage("com.google.android.apps.maps")
-                    }
-                    if (mapsIntent.resolveActivity(context.packageManager) != null) {
-                        context.startActivity(mapsIntent)
-                    } else {
-                        val fallbackUri = Uri.parse(
-                            "geo:${place.latitude},${place.longitude}?q=${place.latitude},${place.longitude}(${Uri.encode(place.name)})"
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.action_navigate))
+                }
+                if (onToggleFavorite != null) {
+                    OutlinedButton(
+                        onClick = onToggleFavorite,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = 14.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
                         )
-                        context.startActivity(Intent(Intent.ACTION_VIEW, fallbackUri))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            stringResource(if (isFavorite) R.string.action_saved else R.string.action_save),
+                        )
                     }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                ),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Navigation,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("Navigate")
+                }
             }
 
             if (reviews.isNotEmpty()) {
-                Spacer(Modifier.height(24.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(16.dp))
-
+                Spacer(Modifier.height(28.dp))
                 Text(
-                    text = "Top Reviews",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = stringResource(R.string.place_top_reviews),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = colors.onSurface,
                 )
-                Spacer(Modifier.height(8.dp))
-
-                reviews.take(5).forEachIndexed { index, review ->
-                    ReviewCard(review = review)
-                    if (index < reviews.size - 1 && index < 4) {
-                        Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(10.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    reviews.take(MAX_REVIEWS).forEach { review ->
+                        ReviewCard(review = review)
                     }
                 }
             }
         }
+    }
+}
+
+private fun launchNavigation(context: Context, place: Place) {
+    val gmmUri = Uri.parse("google.navigation:q=${place.latitude},${place.longitude}")
+    val mapsIntent = Intent(Intent.ACTION_VIEW, gmmUri).apply {
+        setPackage("com.google.android.apps.maps")
+    }
+    if (mapsIntent.resolveActivity(context.packageManager) != null) {
+        context.startActivity(mapsIntent)
+    } else {
+        val fallbackUri = Uri.parse(
+            "geo:${place.latitude},${place.longitude}?q=${place.latitude},${place.longitude}(${Uri.encode(place.name)})",
+        )
+        context.startActivity(Intent(Intent.ACTION_VIEW, fallbackUri))
     }
 }
 
@@ -318,9 +298,8 @@ private fun ReviewCard(review: Review) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -331,7 +310,7 @@ private fun ReviewCard(review: Review) {
             ) {
                 Text(
                     text = review.authorName,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
@@ -376,7 +355,7 @@ private fun ReviewCard(review: Review) {
 }
 
 @Composable
-private fun PlaceHeroPhoto(placeId: String, photoProvider: PlacePhotoProvider) {
+private fun PlaceHeroPhoto(placeId: String, placeName: String, photoProvider: PlacePhotoProvider) {
     var bitmap by remember(placeId) { mutableStateOf<Bitmap?>(null) }
     var loading by remember(placeId) { mutableStateOf(true) }
 
@@ -386,23 +365,30 @@ private fun PlaceHeroPhoto(placeId: String, photoProvider: PlacePhotoProvider) {
         loading = false
     }
 
+    // Collapse entirely when no photo could be loaded instead of leaving an empty frame.
+    if (!loading && bitmap == null) return
+
     Box(
         modifier = Modifier
+            .padding(bottom = 16.dp)
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
-            .clip(MaterialTheme.shapes.medium),
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         contentAlignment = Alignment.Center,
     ) {
-        when {
-            loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            bitmap != null -> bitmap?.let { bmp ->
-                Image(
-                    bitmap = bmp.asImageBitmap(),
-                    contentDescription = "Place photo",
-                    modifier = Modifier.fillMaxWidth(),
-                    contentScale = ContentScale.Crop,
-                )
-            }
+        val bmp = bitmap
+        if (bmp == null) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+        } else {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = stringResource(R.string.place_photo, placeName),
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
         }
     }
 }
+
+private const val MAX_REVIEWS = 5

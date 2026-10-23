@@ -1,4 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NearbySpot</string>
+
+    <!-- Shared actions -->
+    <string name="action_back">Back</string>
+    <string name="action_filters">Filters</string>
+    <string name="action_filters_active">Filters (active)</string>
+    <string name="action_reset">Reset</string>
+    <string name="action_done">Done</string>
+    <string name="action_adjust_filters">Adjust filters</string>
+    <string name="action_refresh_places">Refresh places</string>
+    <string name="action_plan_route">Plan a route</string>
+    <string name="action_saved_places">Saved places</string>
+    <string name="action_navigate">Navigate</string>
+    <string name="action_save">Save</string>
+    <string name="action_saved">Saved</string>
+    <string name="action_remove_saved">Remove from saved</string>
+
+    <!-- Place metadata -->
+    <string name="place_open">Open</string>
+    <string name="place_closed">Closed</string>
+    <string name="place_minutes">%1$d min</string>
+    <string name="place_minutes_away">%1$d min away</string>
+    <string name="place_detour">+%1$d min detour</string>
+    <string name="place_rank">#%1$d</string>
+    <string name="place_photo">Photo of %1$s</string>
+    <string name="place_top_reviews">Top reviews</string>
+    <plurals name="place_review_count">
+        <item quantity="one">%1$s review</item>
+        <item quantity="other">%1$s reviews</item>
+    </plurals>
+
+    <!-- Home -->
+    <string name="home_tagline">Popular spots around you</string>
+    <string name="home_results_title">Top picks nearby</string>
+    <string name="home_results_summary">Within %1$d min · %2$s</string>
+    <string name="home_loading">Finding popular places…</string>
+    <string name="home_empty_title">No popular places found</string>
+    <string name="home_empty_body">Try another category or allow a longer travel time.</string>
+    <string name="permission_title">Discover what\'s nearby</string>
+    <string name="permission_body">NearbySpot uses your location to find popular restaurants, cafes, and attractions around you.</string>
+    <string name="permission_action">Enable location</string>
+
+    <!-- Filters -->
+    <string name="filter_mode">Getting there</string>
+    <string name="filter_within">Travel time</string>
+    <string name="filter_max_detour">Max detour</string>
+    <string name="filter_price">Price</string>
+    <string name="filter_price_any">Any</string>
+    <string name="filter_open_now">Open now</string>
+    <string name="filter_sort">Sort by</string>
+
+    <!-- Route -->
+    <string name="route_search_hint">Where are you heading?</string>
+    <string name="route_results_title">Stops along your route</string>
+    <string name="route_summary">%1$s km · %2$d min</string>
+    <string name="route_idle_title">Plan a trip</string>
+    <string name="route_idle_body">Enter a destination to find popular stops along the way.</string>
+    <string name="route_loading_route">Computing route…</string>
+    <string name="route_loading_places">Finding stops…</string>
+    <string name="route_empty_title">No popular stops found</string>
+    <string name="route_empty_body">Try another category or allow a longer detour.</string>
+    <string name="route_start">Start</string>
+    <string name="route_destination">Destination</string>
+    <string name="route_you">You</string>
+
+    <!-- Saved -->
+    <string name="saved_title">Saved places</string>
+    <plurals name="saved_count">
+        <item quantity="one">%1$d place</item>
+        <item quantity="other">%1$d places</item>
+    </plurals>
+    <string name="saved_empty_title">No saved places yet</string>
+    <string name="saved_empty_body">Tap Save on any place to keep it here for later.</string>
 </resources>

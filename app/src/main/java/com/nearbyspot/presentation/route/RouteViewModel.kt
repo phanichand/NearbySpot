@@ -4,6 +4,7 @@ import com.google.android.gms.maps.model.LatLng
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nearbyspot.domain.model.Category
+import com.nearbyspot.domain.model.RouteFilterSettings
 import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.domain.usecase.ComputeRouteUseCase
 import com.nearbyspot.domain.usecase.GetAlongRoutePlacesUseCase
@@ -113,6 +114,11 @@ class RouteViewModel @Inject constructor(
             it.copy(filterSettings = it.filterSettings.copy(openNowOnly = enabled))
         }
         searchAlongRoute()
+    }
+
+    fun onFiltersReset() {
+        _uiState.update { it.copy(filterSettings = RouteFilterSettings()) }
+        computeRouteAndSearch()
     }
 
     fun onPlaceHighlighted(placeId: String?) {

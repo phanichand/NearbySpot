@@ -15,10 +15,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.nearbyspot.domain.model.Category
 
@@ -27,6 +29,7 @@ fun CategoryChipRow(
     selectedCategories: Set<Category>,
     onCategoryToggled: (Category) -> Unit,
     modifier: Modifier = Modifier,
+    edgePadding: Dp = 16.dp,
 ) {
     val scrollState = rememberScrollState()
     val fadeColor = MaterialTheme.colorScheme.surface
@@ -58,7 +61,7 @@ fun CategoryChipRow(
                             endX = size.width,
                         ),
                         blendMode = BlendMode.DstIn,
-                        topLeft = androidx.compose.ui.geometry.Offset(size.width - fadeWidth, 0f),
+                        topLeft = Offset(size.width - fadeWidth, 0f),
                         size = size.copy(width = fadeWidth),
                     )
                 }
@@ -66,7 +69,7 @@ fun CategoryChipRow(
             .horizontalScroll(scrollState),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(edgePadding - 8.dp))
         Category.entries.forEach { category ->
             val selected = category in selectedCategories
             FilterChip(
@@ -76,7 +79,7 @@ fun CategoryChipRow(
                 leadingIcon = {
                     Icon(
                         imageVector = category.icon,
-                        contentDescription = category.label,
+                        contentDescription = null,
                         modifier = Modifier.size(FilterChipDefaults.IconSize),
                         tint = if (selected) {
                             MaterialTheme.colorScheme.onPrimaryContainer
@@ -87,6 +90,6 @@ fun CategoryChipRow(
                 },
             )
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(edgePadding - 8.dp))
     }
 }
