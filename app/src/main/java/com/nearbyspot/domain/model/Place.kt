@@ -26,4 +26,5 @@ data class Review(
     val rating: Double,
     val text: String,
     val relativeTimeDescription: String,
+    val publishedAtEpochMillis: Long? = null,
 )

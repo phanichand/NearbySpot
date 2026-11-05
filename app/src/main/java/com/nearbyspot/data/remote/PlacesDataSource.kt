@@ -118,6 +118,7 @@ class PlacesDataSource @Inject constructor(
                         rating = review.rating,
                         text = review.text ?: "",
                         relativeTimeDescription = review.relativePublishTimeDescription ?: "",
+                        publishedAtEpochMillis = parseReviewPublishTime(review.publishTime),
                     )
                 } ?: emptyList()
                 cont.resume(reviews)
