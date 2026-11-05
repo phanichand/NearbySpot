@@ -5,6 +5,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.nearbyspot.domain.model.AlongRoutePlace
 import com.nearbyspot.domain.model.GeoPoint
 import com.nearbyspot.domain.model.Place
+import com.nearbyspot.domain.model.PlacesBudgetExhaustedException
 import com.nearbyspot.domain.model.RouteFilterSettings
 import com.nearbyspot.domain.model.RouteInfo
 import com.nearbyspot.domain.model.RouteMatrixEntry
@@ -15,6 +16,7 @@ import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.domain.repository.PlaceRepository
 import com.nearbyspot.util.PolylineUtils
 import javax.inject.Inject
+import kotlin.math.log10
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -58,6 +60,9 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         } catch (error: RouteSearchException) {
             outcome = RouteSearchDiagnostics.Outcome.FAILURE
             throw error
+        } catch (error: PlacesBudgetExhaustedException) {
+            outcome = RouteSearchDiagnostics.Outcome.FAILURE
+            throw RouteSearchException(RouteSearchFailure.MONTHLY_LIMIT_REACHED, retryable = false)
         } catch (error: Exception) {
             outcome = RouteSearchDiagnostics.Outcome.FAILURE
             throw RouteSearchException(RouteSearchFailure.SERVICE_UNAVAILABLE)
@@ -99,6 +104,8 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
+            } catch (budget: PlacesBudgetExhaustedException) {
+                throw budget
             } catch (_: Exception) {
                 diagnostics.increment(RouteSearchDiagnostics.Counter.PARTIAL_FAILURES)
                 null
@@ -120,6 +127,8 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
+            } catch (budget: PlacesBudgetExhaustedException) {
+                throw budget
             } catch (_: Exception) {
                 diagnostics.increment(RouteSearchDiagnostics.Counter.PARTIAL_FAILURES)
                 null
@@ -210,7 +219,17 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
                     }.awaitAll()
                 }
             }
-            initialDiscoveries + supplementalDiscoveries
+            val gapDiscoveries = fillRouteGaps(
+                routeInfo = routeInfo,
+                currentRouteIndex = currentRouteIndex,
+                knownPlaces = (initialDiscoveries + supplementalDiscoveries)
+                    .flatMap { it.places.orEmpty() },
+                groupOffset = coverageAnchors.size + 1,
+                placeTypes = placeTypes,
+                filters = filters,
+                diagnostics = diagnostics,
+            )
+            initialDiscoveries + supplementalDiscoveries + gapDiscoveries
         } else {
             val anchors = diagnostics.measure(RouteSearchDiagnostics.Stage.WAYPOINT_PLANNING) {
                 PolylineUtils.planStableRouteAnchors(
@@ -349,30 +368,35 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
             if (verified.detourSeconds / 60.0 > filters.maxDetourMinutes) {
                 return@mapNotNull null
             }
-            EligiblePlace(
-                result = AlongRoutePlace(
-                    place = verified.candidate.place,
-                    reachableSeconds = verified.reachSeconds,
-                    detourSeconds = verified.detourSeconds,
-                    nearestRoutePointIndex = PolylineUtils.findNearestPointIndex(
-                        routeInfo.decodedPoints,
-                        LatLng(
-                            verified.candidate.place.latitude,
-                            verified.candidate.place.longitude,
-                        ),
-                    ),
-                    score = computeScore(
-                        rating = verified.candidate.place.rating,
-                        reviewCount = verified.candidate.place.userRatingCount,
-                        detourMinutes = verified.detourSeconds / 60.0,
-                        maxDetourMinutes = filters.maxDetourMinutes,
+            if (isTooCloseToStart(verified.reachSeconds, baselineSeconds)) {
+                return@mapNotNull null
+            }
+            AlongRoutePlace(
+                place = verified.candidate.place,
+                reachableSeconds = verified.reachSeconds,
+                detourSeconds = verified.detourSeconds,
+                nearestRoutePointIndex = PolylineUtils.findNearestPointIndex(
+                    routeInfo.decodedPoints,
+                    LatLng(
+                        verified.candidate.place.latitude,
+                        verified.candidate.place.longitude,
                     ),
                 ),
-                anchorIndex = verified.candidate.anchorIndex,
+                score = computeScore(
+                    rating = verified.candidate.place.rating,
+                    reviewCount = verified.candidate.place.userRatingCount,
+                    detourMinutes = verified.detourSeconds / 60.0,
+                    maxDetourMinutes = filters.maxDetourMinutes,
+                ),
             )
         }
 
-        selectGeographicallyDiverse(eligible)
+        selectSpreadAcrossRoute(
+            eligible = eligible,
+            currentRouteIndex = currentRouteIndex,
+            lastRouteIndex = routeInfo.decodedPoints.lastIndex,
+            remainingSeconds = baselineSeconds,
+        )
             .also { results ->
                 diagnostics.increment(RouteSearchDiagnostics.Counter.FINAL_RESULTS, results.size)
                 onProgress(RouteSearchProgress.Complete)
@@ -423,21 +447,84 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         return diverse
     }
 
+    /**
+     * Long routes are split into time slots; any slot ahead of the traveller that has no usable
+     * candidate gets one wider search around its midpoint. Midpoints depend only on the route, so
+     * repeat searches hit the nearby-results cache instead of spending quota.
+     */
+    private suspend fun fillRouteGaps(
+        routeInfo: RouteInfo,
+        currentRouteIndex: Int,
+        knownPlaces: List<Place>,
+        groupOffset: Int,
+        placeTypes: List<String>,
+        filters: RouteFilterSettings,
+        diagnostics: RouteSearchDiagnostics,
+    ): List<AnchorDiscovery> {
+        val points = routeInfo.decodedPoints
+        val lastIndex = points.lastIndex
+        val slotCount = routeSlotCount(routeInfo.durationSeconds)
+        if (slotCount < 2 || lastIndex <= 0) return emptyList()
+
+        val coveredSlots = knownPlaces
+            .filter { matchesCandidateFilters(it, filters) }
+            .mapTo(mutableSetOf()) { place ->
+                routeSlot(
+                    PolylineUtils.findNearestPointIndex(points, LatLng(place.latitude, place.longitude)),
+                    0,
+                    lastIndex,
+                    slotCount,
+                )
+            }
+        val destination = points.last()
+        val gaps = (0 until slotCount)
+            .filter { it !in coveredSlots }
+            .map { slot -> slot to points[((slot + 0.5) / slotCount * lastIndex).toInt()] }
+            .filter { (_, midpoint) ->
+                PolylineUtils.findNearestPointIndex(points, midpoint) > currentRouteIndex &&
+                    PolylineUtils.haversineDistance(midpoint, destination) >
+                    DESTINATION_SEARCH_RADIUS_METERS
+            }
+            .take(MAX_GAP_FILL_SEARCHES)
+        if (gaps.isEmpty()) return emptyList()
+
+        diagnostics.increment(RouteSearchDiagnostics.Counter.WAYPOINTS_ATTEMPTED, gaps.size)
+        diagnostics.increment(RouteSearchDiagnostics.Counter.NEARBY_REPOSITORY_CALLS, gaps.size)
+        return coroutineScope {
+            gaps.map { (slot, midpoint) ->
+                async {
+                    AnchorDiscovery(
+                        anchorIndex = groupOffset + slot,
+                        places = searchAnchor(
+                            anchor = midpoint,
+                            placeTypes = placeTypes,
+                            diagnostics = diagnostics,
+                            radiusMeters = GAP_FILL_RADIUS_METERS,
+                        ),
+                    )
+                }
+            }.awaitAll()
+        }
+    }
+
     private suspend fun searchAnchor(
         anchor: LatLng,
         placeTypes: List<String>,
         diagnostics: RouteSearchDiagnostics,
+        radiusMeters: Double = SEARCH_RADIUS_METERS,
     ): List<Place>? = try {
         withTimeoutOrNull(ANCHOR_SEARCH_TIMEOUT_MS) {
             repository.searchNearbyPlaces(
                 latitude = anchor.latitude,
                 longitude = anchor.longitude,
-                radiusMeters = SEARCH_RADIUS_METERS,
+                radiusMeters = radiusMeters,
                 placeTypes = placeTypes,
             )
         } ?: throw AnchorSearchTimeoutException()
     } catch (cancellation: CancellationException) {
         throw cancellation
+    } catch (budget: PlacesBudgetExhaustedException) {
+        throw budget
     } catch (_: Exception) {
         diagnostics.increment(RouteSearchDiagnostics.Counter.PARTIAL_FAILURES)
         null
@@ -464,21 +551,32 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         }
     }
 
-    private fun selectGeographicallyDiverse(
-        eligible: List<EligiblePlace>,
+    private fun selectSpreadAcrossRoute(
+        eligible: List<AlongRoutePlace>,
+        currentRouteIndex: Int,
+        lastRouteIndex: Int,
+        remainingSeconds: Int,
     ): List<AlongRoutePlace> {
-        val globallySorted = eligible.sortedWith(eligiblePopularityComparator)
-        val reserved = globallySorted
-            .groupBy(EligiblePlace::anchorIndex)
+        val slotCount = routeSlotCount(remainingSeconds)
+        val maxPerSlot = maxOf(MIN_RESULTS_PER_SLOT, ceilDiv(MAX_RESULTS, slotCount))
+        val slots = eligible
+            .sortedWith(resultScoreComparator)
+            .groupBy { result ->
+                routeSlot(result.nearestRoutePointIndex, currentRouteIndex, lastRouteIndex, slotCount)
+            }
             .toSortedMap()
             .values
-            .map { group -> group.first() }
-        val reservedIds = reserved.mapTo(mutableSetOf()) { it.result.place.placeId }
+            .map { slot -> slot.take(maxPerSlot) }
 
-        return (reserved + globallySorted.filter { it.result.place.placeId !in reservedIds })
-            .take(MAX_RESULTS)
-            .sortedWith(eligiblePopularityComparator)
-            .map(EligiblePlace::result)
+        // Round-robin so every part of the route gets its best stop before any part gets a second.
+        return buildList {
+            for (rank in 0 until maxPerSlot) {
+                for (slot in slots) {
+                    slot.getOrNull(rank)?.let(::add)
+                    if (size == MAX_RESULTS) return@buildList
+                }
+            }
+        }.sortedWith(resultScoreComparator)
     }
 
     private data class AnchorDiscovery(
@@ -497,22 +595,24 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         val detourSeconds: Int,
     )
 
-    private data class EligiblePlace(
-        val result: AlongRoutePlace,
-        val anchorIndex: Int,
-    )
-
     private class AnchorSearchTimeoutException : Exception()
 
     companion object {
         private const val TAG = "AlongRoutePlaces"
         const val MIN_REVIEW_COUNT = 100
         const val MAX_RESULTS = 10
+        const val MIN_RESULTS_PER_SLOT = 2
+        const val MAX_ROUTE_SLOTS = 8
+        const val ROUTE_SLOT_SECONDS = 5_400
+        const val LONG_TRIP_SECONDS = 3_600
+        const val MIN_REACH_SECONDS_ON_LONG_TRIP = 600
         const val SEARCH_RADIUS_METERS = 2000.0
         const val DESTINATION_SEARCH_RADIUS_METERS = 15_000.0
         const val SKIP_NEAR_DESTINATION_METERS = 3000.0
         const val MAX_SEARCH_ANCHORS = 8
         const val MAX_COVERAGE_ANCHORS = 4
+        const val MAX_GAP_FILL_SEARCHES = 4
+        const val GAP_FILL_RADIUS_METERS = 12_000.0
         const val MAX_SUPPLEMENTAL_ANCHORS = 4
         const val MAX_CONCURRENT_DISCOVERY_CALLS = 3
         const val MAX_CANDIDATES_PER_ANCHOR = 3
@@ -520,18 +620,23 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         const val SEARCH_TIMEOUT_MS = 30_000L
         const val ANCHOR_SEARCH_TIMEOUT_MS = 8_000L
         const val ROUTE_SEARCH_TIMEOUT_MS = 12_000L
-        private const val MIN_RATING = 3.5
+        private const val PRIOR_RATING = 4.0
+        private const val PRIOR_WEIGHT_REVIEWS = 200.0
+        private const val POPULARITY_WEIGHT = 0.25
+        private const val MAX_DETOUR_PENALTY = 0.3
 
         private val candidateQualityComparator =
-            compareByDescending<AnchoredPlace> { it.place.userRatingCount }
-                .thenByDescending { it.place.rating }
+            compareByDescending<AnchoredPlace> {
+                smoothedRating(it.place.rating, it.place.userRatingCount)
+            }
+                .thenByDescending { it.place.userRatingCount }
                 .thenBy { it.place.placeId }
 
-        private val eligiblePopularityComparator =
-            compareByDescending<EligiblePlace> { it.result.place.userRatingCount }
-                .thenByDescending { it.result.place.rating }
-                .thenBy { it.result.detourSeconds }
-                .thenBy { it.result.place.placeId }
+        private val resultScoreComparator =
+            compareByDescending<AlongRoutePlace> { it.score }
+                .thenByDescending { it.place.userRatingCount }
+                .thenBy { it.detourSeconds }
+                .thenBy { it.place.placeId }
 
         fun computeDetourSeconds(
             currentToPlaceSeconds: Int,
@@ -544,19 +649,43 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
             .coerceIn(0L, Int.MAX_VALUE.toLong())
             .toInt()
 
+        /** Rating pulled toward [PRIOR_RATING] until a place has many reviews behind it. */
+        fun smoothedRating(rating: Double, reviewCount: Int): Double =
+            (reviewCount * rating + PRIOR_WEIGHT_REVIEWS * PRIOR_RATING) /
+                (reviewCount + PRIOR_WEIGHT_REVIEWS)
+
         fun computeScore(
             rating: Double,
             reviewCount: Int,
             detourMinutes: Double,
             maxDetourMinutes: Int,
         ): Double {
-            val popularityBase = Math.pow(reviewCount.toDouble(), 0.6)
-            val ratingBoost = 1.0 +
-                ((rating - MIN_RATING) / (5.0 - MIN_RATING)).coerceIn(0.0, 1.0)
+            val popularityBonus = POPULARITY_WEIGHT * log10(reviewCount.coerceAtLeast(1).toDouble())
             val effectiveMaxDetour = maxDetourMinutes.coerceAtLeast(1)
-            val detourPenalty = 1.0 -
-                (detourMinutes / (effectiveMaxDetour * 2.0)).coerceIn(0.0, 0.4)
-            return popularityBase * ratingBoost * detourPenalty
+            val detourPenalty = MAX_DETOUR_PENALTY *
+                (detourMinutes / effectiveMaxDetour).coerceIn(0.0, 1.0)
+            return smoothedRating(rating, reviewCount) + popularityBonus - detourPenalty
+        }
+
+        /** Stops a few minutes from the start of a long trip are not meaningful meal stops. */
+        fun isTooCloseToStart(reachSeconds: Int, remainingSeconds: Int): Boolean =
+            remainingSeconds >= LONG_TRIP_SECONDS && reachSeconds < MIN_REACH_SECONDS_ON_LONG_TRIP
+
+        fun routeSlotCount(remainingSeconds: Int): Int =
+            ceilDiv(remainingSeconds.coerceAtLeast(1), ROUTE_SLOT_SECONDS)
+                .coerceIn(1, MAX_ROUTE_SLOTS)
+
+        fun routeSlot(
+            nearestRouteIndex: Int,
+            currentRouteIndex: Int,
+            lastRouteIndex: Int,
+            slotCount: Int,
+        ): Int {
+            val span = lastRouteIndex - currentRouteIndex
+            if (span <= 0) return 0
+            val fraction = ((nearestRouteIndex - currentRouteIndex).toDouble() / span)
+                .coerceIn(0.0, 1.0)
+            return (fraction * slotCount).toInt().coerceAtMost(slotCount - 1)
         }
     }
 }
@@ -567,6 +696,8 @@ private val TransportMode.anchorIntervalMeters: Double
         TransportMode.WALK -> 1_500.0
         TransportMode.BICYCLE -> 3_000.0
     }
+
+private fun ceilDiv(dividend: Int, divisor: Int): Int = (dividend + divisor - 1) / divisor
 
 private fun LatLng.toGeoPoint() = GeoPoint(latitude, longitude)
 

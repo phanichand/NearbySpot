@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -44,7 +45,8 @@ class DestinationSearchFieldTest {
                         onQueryChanged = {},
                         onFocusGained = {},
                         onClear = {},
-                        onDismiss = { expanded = false },
+                        onSuggestionsDismissed = { expanded = false },
+                        onEditingFinished = {},
                         onRetry = {},
                         onSuggestionSelected = {},
                         modifier = Modifier.width(300.dp),
@@ -95,7 +97,8 @@ class DestinationSearchFieldTest {
                         query = ""
                         expanded = false
                     },
-                    onDismiss = { expanded = false },
+                    onSuggestionsDismissed = { expanded = false },
+                    onEditingFinished = {},
                     onRetry = {},
                     onSuggestionSelected = {
                         selected = it
@@ -131,7 +134,8 @@ class DestinationSearchFieldTest {
                     onQueryChanged = {},
                     onFocusGained = {},
                     onClear = {},
-                    onDismiss = {},
+                    onSuggestionsDismissed = {},
+                    onEditingFinished = {},
                     onRetry = { retries++ },
                     onSuggestionSelected = {},
                     modifier = Modifier.width(300.dp),
@@ -147,6 +151,39 @@ class DestinationSearchFieldTest {
         composeRule.onNodeWithText("Couldn’t load destinations").assertIsDisplayed()
         composeRule.onNodeWithText("Retry").performClick()
         composeRule.runOnIdle { assertEquals(1, retries) }
+    }
+
+    @Test
+    fun dismissingSuggestionsDoesNotClearSearchFieldFocus() {
+        var expanded by mutableStateOf(true)
+
+        composeRule.setContent {
+            NearbySpotTheme {
+                DestinationSearchField(
+                    query = "Hyd",
+                    suggestions = SUGGESTIONS,
+                    expanded = expanded,
+                    isLoading = false,
+                    errorMessage = null,
+                    onQueryChanged = {},
+                    onFocusGained = {},
+                    onClear = {},
+                    onSuggestionsDismissed = { expanded = false },
+                    onEditingFinished = {},
+                    onRetry = {},
+                    onSuggestionSelected = {},
+                    modifier = Modifier.width(300.dp),
+                )
+            }
+        }
+
+        val searchField = composeRule.onNodeWithTag(DESTINATION_SEARCH_FIELD_TAG)
+        searchField.performClick()
+        searchField.assertIsFocused()
+
+        composeRule.runOnIdle { expanded = false }
+
+        searchField.assertIsFocused()
     }
 
     private companion object {

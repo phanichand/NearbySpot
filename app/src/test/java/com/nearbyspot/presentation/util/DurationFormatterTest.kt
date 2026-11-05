@@ -61,7 +61,8 @@ class DurationFormatterTest {
             Locale.setDefault(Locale.GERMANY)
             assertEquals("1.0 km", DistanceFormatter.format(1_000))
             assertEquals("1.5 km", DistanceFormatter.format(1_500))
-            assertEquals("568.0 km", DistanceFormatter.format(568_000))
+            assertEquals("99.9 km", DistanceFormatter.format(99_900))
+            assertEquals("568 km", DistanceFormatter.format(568_000))
         } finally {
             Locale.setDefault(originalLocale)
         }

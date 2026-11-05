@@ -41,16 +41,21 @@ object DistanceFormatter {
     fun format(distanceMeters: Int): String {
         require(distanceMeters >= 0) { "distanceMeters must be non-negative" }
 
-        return if (distanceMeters < METERS_PER_KILOMETER) {
-            "$distanceMeters m"
-        } else {
-            String.format(
+        return when {
+            distanceMeters < METERS_PER_KILOMETER -> "$distanceMeters m"
+            distanceMeters < WHOLE_KILOMETER_THRESHOLD_METERS -> String.format(
                 Locale.ROOT,
                 "%.1f km",
                 distanceMeters / METERS_PER_KILOMETER.toDouble(),
+            )
+            else -> String.format(
+                Locale.ROOT,
+                "%d km",
+                (distanceMeters / METERS_PER_KILOMETER.toDouble()).roundToInt(),
             )
         }
     }
 
     private const val METERS_PER_KILOMETER = 1_000
+    private const val WHOLE_KILOMETER_THRESHOLD_METERS = 100_000
 }

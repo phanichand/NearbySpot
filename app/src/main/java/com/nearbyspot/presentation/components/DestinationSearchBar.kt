@@ -257,7 +257,8 @@ fun DestinationSearchBar(
             suggestions = emptyList()
             pendingSelection = null
         },
-        onDismiss = { dismissSearch(clearFocus = true) },
+        onSuggestionsDismissed = { dismissSearch(clearFocus = false) },
+        onEditingFinished = { dismissSearch(clearFocus = true) },
         onRetry = {
             when (retryTarget) {
                 RetryTarget.QUERY -> requestSuggestions(query)
@@ -291,7 +292,8 @@ internal fun DestinationSearchField(
     onQueryChanged: (String) -> Unit,
     onFocusGained: () -> Unit,
     onClear: () -> Unit,
-    onDismiss: () -> Unit,
+    onSuggestionsDismissed: () -> Unit,
+    onEditingFinished: () -> Unit,
     onRetry: () -> Unit,
     onSuggestionSelected: (DestinationSuggestion) -> Unit,
     modifier: Modifier = Modifier,
@@ -299,7 +301,7 @@ internal fun DestinationSearchField(
     val popupVisible = expanded && (isLoading || errorMessage != null || suggestions.isNotEmpty())
     val searchDescription = stringResource(R.string.destination_search_description)
 
-    BackHandler(enabled = expanded, onBack = onDismiss)
+    BackHandler(enabled = expanded, onBack = onEditingFinished)
 
     BoxWithConstraints(modifier = modifier) {
         val anchorWidth = maxWidth
@@ -339,7 +341,7 @@ internal fun DestinationSearchField(
                 }
             },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { onDismiss() }),
+            keyboardActions = KeyboardActions(onDone = { onEditingFinished() }),
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyLarge,
             shape = MaterialTheme.shapes.extraLarge,
@@ -356,7 +358,7 @@ internal fun DestinationSearchField(
 
         DropdownMenu(
             expanded = popupVisible,
-            onDismissRequest = onDismiss,
+            onDismissRequest = onSuggestionsDismissed,
             modifier = Modifier
                 .width(anchorWidth)
                 .heightIn(max = 240.dp)

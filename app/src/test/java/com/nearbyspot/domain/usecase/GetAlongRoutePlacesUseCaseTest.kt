@@ -3,6 +3,7 @@ package com.nearbyspot.domain.usecase
 import com.google.android.gms.maps.model.LatLng
 import com.nearbyspot.domain.model.GeoPoint
 import com.nearbyspot.domain.model.Place
+import com.nearbyspot.domain.model.PlacesBudgetExhaustedException
 import com.nearbyspot.domain.model.RouteFilterSettings
 import com.nearbyspot.domain.model.RouteInfo
 import com.nearbyspot.domain.model.RouteMatrixEntry
@@ -255,7 +256,7 @@ class GetAlongRoutePlacesUseCaseTest {
     }
 
     @Test
-    fun `route search keeps destination eateries and orders strictly by review count`() = runTest {
+    fun `route search keeps destination eateries and orders by blended quality score`() = runTest {
         val mostReviewedAtDestination = place(
             id = "destination-favorite",
             reviewCount = 20_000,
@@ -282,7 +283,7 @@ class GetAlongRoutePlacesUseCaseTest {
         )
 
         assertEquals(
-            listOf("destination-favorite", "popular", "higher-rating"),
+            listOf("popular", "destination-favorite", "higher-rating"),
             result.map { it.place.placeId },
         )
         coVerify(exactly = 1) {
@@ -296,7 +297,7 @@ class GetAlongRoutePlacesUseCaseTest {
     }
 
     @Test
-    fun `route search reserves popular results across corridor bands before global fill`() = runTest {
+    fun `route search spreads results across the route instead of clustering at the origin`() = runTest {
         val originCluster = (0 until 30).map { index ->
             place(
                 id = "origin-$index",
@@ -333,7 +334,7 @@ class GetAlongRoutePlacesUseCaseTest {
             if (origins.size == 1 && destinations.size > 1) {
                 matrixCandidateCount = destinations.size - 1
             }
-            matrixFor(origins, destinations, 600, 500, 1_000)
+            matrixFor(origins, destinations, 600, 500, 40_000)
         }
 
         val result = useCase(
@@ -348,10 +349,8 @@ class GetAlongRoutePlacesUseCaseTest {
         assertTrue(result.map { it.place.placeId }.containsAll(
             listOf("corridor-2", "corridor-3", "corridor-4", "destination"),
         ))
-        assertEquals(
-            result.map { it.place.userRatingCount }.sortedDescending(),
-            result.map { it.place.userRatingCount },
-        )
+        assertEquals(result.map { it.score }.sortedDescending(), result.map { it.score })
+        assertEquals(2, result.count { it.place.placeId.startsWith("origin-") })
         coVerify(exactly = 1) { repository.searchNearbyPlaces(any(), any(), any(), any()) }
     }
 
@@ -481,6 +480,143 @@ class GetAlongRoutePlacesUseCaseTest {
         }
         search.cancel()
         search.await()
+    }
+
+    @Test
+    fun `stops within minutes of the start are skipped on long trips only`() {
+        assertTrue(GetAlongRoutePlacesUseCase.isTooCloseToStart(120, 38_000))
+        assertTrue(GetAlongRoutePlacesUseCase.isTooCloseToStart(599, 3_600))
+        assertEquals(false, GetAlongRoutePlacesUseCase.isTooCloseToStart(600, 38_000))
+        assertEquals(false, GetAlongRoutePlacesUseCase.isTooCloseToStart(120, 3_599))
+    }
+
+    @Test
+    fun `a well reviewed city restaurant at the start is dropped from a long trip`() = runTest {
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } returns
+            listOf(place("city", reviewCount = 18_000), place("road", reviewCount = 300))
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            val origins = firstArg<List<GeoPoint>>()
+            val destinations = secondArg<List<GeoPoint>>()
+            if (origins.size == 1 && destinations.size > 1) {
+                destinations.indices.map { index ->
+                    entry(
+                        originIndex = 0,
+                        destinationIndex = index,
+                        durationSeconds = when (index) {
+                            destinations.lastIndex -> 38_000
+                            0 -> 120
+                            else -> 9_000
+                        },
+                    )
+                }
+            } else {
+                origins.indices.map { entry(it, destinationIndex = 0, durationSeconds = 29_000) }
+            }
+        }
+
+        val result = useCase(longRoute(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings())
+
+        assertEquals(1, result.size)
+        assertEquals(9_000, result.single().reachableSeconds)
+    }
+
+    @Test
+    fun `smoothed rating keeps a few reviews from beating many reviews`() {
+        val thin = GetAlongRoutePlacesUseCase.smoothedRating(rating = 4.9, reviewCount = 100)
+        val established = GetAlongRoutePlacesUseCase.smoothedRating(rating = 4.5, reviewCount = 18_000)
+        assertTrue(thin < 4.5)
+        assertTrue(established > 4.4)
+    }
+
+    @Test
+    fun `score prefers a strong rating over raw review count`() {
+        fun score(rating: Double, reviews: Int) =
+            GetAlongRoutePlacesUseCase.computeScore(rating, reviews, 5.0, 15)
+
+        assertTrue(score(rating = 4.7, reviews = 935) > score(rating = 3.3, reviews = 5_000))
+        assertTrue(score(rating = 4.5, reviews = 18_000) > score(rating = 4.5, reviews = 900))
+    }
+
+    @Test
+    fun `route slots scale with trip length and cover the remaining route`() {
+        assertEquals(1, GetAlongRoutePlacesUseCase.routeSlotCount(1_000))
+        assertEquals(8, GetAlongRoutePlacesUseCase.routeSlotCount(38_880))
+        assertEquals(8, GetAlongRoutePlacesUseCase.routeSlotCount(500_000))
+        assertEquals(0, GetAlongRoutePlacesUseCase.routeSlot(0, 0, 200, 8))
+        assertEquals(4, GetAlongRoutePlacesUseCase.routeSlot(100, 0, 200, 8))
+        assertEquals(7, GetAlongRoutePlacesUseCase.routeSlot(200, 0, 200, 8))
+        assertEquals(0, GetAlongRoutePlacesUseCase.routeSlot(5, 5, 5, 8))
+    }
+
+    @Test
+    fun `exhausted monthly budget is a non retryable typed failure`() = runTest {
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } throws
+            PlacesBudgetExhaustedException()
+
+        val failure = runCatching {
+            useCase(route(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings())
+        }.exceptionOrNull() as RouteSearchException
+
+        assertEquals(RouteSearchFailure.MONTHLY_LIMIT_REACHED, failure.failure)
+        assertEquals(false, failure.retryable)
+    }
+
+    @Test
+    fun `empty time slots get a bounded wider gap search`() = runTest {
+        coEvery { repository.searchAlongRoute("encoded-long-route", any()) } returns
+            listOf(place("origin", reviewCount = 500, latitude = 0.02, longitude = 0.0))
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } returns emptyList()
+        coEvery {
+            repository.searchNearbyPlaces(
+                any(),
+                any(),
+                GetAlongRoutePlacesUseCase.GAP_FILL_RADIUS_METERS,
+                any(),
+            )
+        } coAnswers {
+            listOf(place("gap-${firstArg<Double>()}", latitude = firstArg(), longitude = 0.0))
+        }
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 3_000, 500, 40_000)
+        }
+
+        val result = useCase(
+            longEncodedRoute().copy(durationSeconds = 40_000),
+            ORIGIN,
+            0,
+            listOf("restaurant"),
+            RouteFilterSettings(),
+        )
+
+        coVerify(exactly = GetAlongRoutePlacesUseCase.MAX_GAP_FILL_SEARCHES) {
+            repository.searchNearbyPlaces(
+                any(),
+                any(),
+                GetAlongRoutePlacesUseCase.GAP_FILL_RADIUS_METERS,
+                any(),
+            )
+        }
+        assertTrue(result.any { it.place.placeId.startsWith("gap-") })
+    }
+
+    @Test
+    fun `routes without gaps spend no extra searches`() = runTest {
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } returns
+            listOf(place("only"))
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 600, 500, 1_000)
+        }
+
+        useCase(route(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings())
+
+        coVerify(exactly = 0) {
+            repository.searchNearbyPlaces(
+                any(),
+                any(),
+                GetAlongRoutePlacesUseCase.GAP_FILL_RADIUS_METERS,
+                any(),
+            )
+        }
     }
 
     private fun matrixFor(

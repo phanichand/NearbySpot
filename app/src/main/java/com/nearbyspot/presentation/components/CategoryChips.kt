@@ -19,7 +19,9 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.unit.dp
 import com.nearbyspot.domain.model.Category
 
@@ -28,6 +30,7 @@ fun CategoryChipRow(
     selectedCategories: Set<Category>,
     onCategoryToggled: (Category) -> Unit,
     modifier: Modifier = Modifier,
+    chipContainerColor: Color = Color.Unspecified,
 ) {
     val scrollState = rememberScrollState()
     val fadeColor = MaterialTheme.colorScheme.surface
@@ -87,6 +90,11 @@ fun CategoryChipRow(
                     )
                 },
                 modifier = Modifier.heightIn(min = 48.dp),
+                colors = if (chipContainerColor.isSpecified) {
+                    FilterChipDefaults.filterChipColors(containerColor = chipContainerColor)
+                } else {
+                    FilterChipDefaults.filterChipColors()
+                },
             )
         }
         Spacer(Modifier.width(16.dp))

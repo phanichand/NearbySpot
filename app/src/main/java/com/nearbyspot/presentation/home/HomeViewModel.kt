@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nearbyspot.domain.model.Category
 import com.nearbyspot.domain.model.FilterSettings
+import com.nearbyspot.domain.model.PlacesBudgetExhaustedException
 import com.nearbyspot.domain.model.RankedPlace
 import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.domain.usecase.GetNearbyPlacesUseCase
@@ -208,6 +209,13 @@ class HomeViewModel @Inject constructor(
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
+            } catch (_: PlacesBudgetExhaustedException) {
+                updateForSearchGeneration(generation) {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "You've reached this month's search limit. It resets next month.",
+                    )
+                }
             } catch (_: Exception) {
                 updateForSearchGeneration(generation) {
                     it.copy(

@@ -1,6 +1,10 @@
 package com.nearbyspot.presentation.route
 
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -45,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +87,7 @@ import com.nearbyspot.presentation.components.DestinationSearchBar
 import com.nearbyspot.presentation.detail.PlaceDetailSheet
 import com.nearbyspot.presentation.util.DurationFormatter
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -187,6 +193,24 @@ fun RouteScreen(
     }
 
     val bubbleListState = rememberLazyListState()
+    // After the user swipes the carousel, highlight the stop that settled into view so the map
+    // follows the card. Ignore programmatic scrolls and stops that are already visible.
+    LaunchedEffect(bubbleListState) {
+        var wasScrolling = false
+        snapshotFlow { bubbleListState.isScrollInProgress }.collect { scrolling ->
+            if (wasScrolling && !scrolling) {
+                val visibleKeys = bubbleListState.layoutInfo.visibleItemsInfo.map { it.key }
+                val current = viewModel.uiState.value
+                val alreadyVisible = current.highlightedPlaceId?.let { it in visibleKeys } == true
+                val target = current.alongRoutePlaces
+                    .getOrNull(bubbleListState.firstVisibleItemIndex)
+                if (!alreadyVisible && target != null) {
+                    viewModel.onPlaceHighlighted(target.place.placeId)
+                }
+            }
+            wasScrolling = scrolling
+        }
+    }
     val isDarkTheme = isSystemInDarkTheme()
     val context = LocalContext.current
     val darkMapStyle = remember(isDarkTheme) {
@@ -344,26 +368,16 @@ fun RouteScreen(
                 }
             }
 
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                shadowElevation = 4.dp,
-            ) {
-                CategoryChipRow(
-                    selectedCategories = state.selectedCategories,
-                    onCategoryToggled = { viewModel.onCategoryToggled(it) },
-                    modifier = Modifier.padding(vertical = 4.dp),
-                )
-            }
+            CategoryChipRow(
+                selectedCategories = state.selectedCategories,
+                onCategoryToggled = { viewModel.onCategoryToggled(it) },
+                chipContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            )
 
             Spacer(Modifier.height(8.dp))
 
             state.routeInfo?.let { routeInfo ->
                 RouteSummaryCard(
-                    destinationName = state.destinationName,
                     distanceMeters = routeInfo.distanceMeters,
                     durationSeconds = routeInfo.durationSeconds,
                     resultCount = state.alongRoutePlaces.size,
@@ -374,7 +388,7 @@ fun RouteScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
                 )
             }
 
@@ -574,6 +588,7 @@ fun RouteScreen(
                             .padding(horizontal = 16.dp),
                         shape = MaterialTheme.shapes.large,
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        contentColor = MaterialTheme.colorScheme.onSurface,
                         shadowElevation = 3.dp,
                     ) {
                         Column(modifier = Modifier.padding(vertical = 12.dp)) {
@@ -630,8 +645,19 @@ fun RouteScreen(
                                         rank = index + 1,
                                         routeFraction = fraction,
                                         routeZoneLabel = zoneLabel,
+                                        distanceAlongRouteMeters =
+                                            (fraction * activeRouteInfo.distanceMeters).roundToInt(),
                                         isHighlighted = arPlace.place.placeId ==
                                             state.highlightedPlaceId,
+                                        isFavorite = state.favoriteIds.contains(arPlace.place.placeId),
+                                        onToggleFavorite = { viewModel.onToggleFavorite(arPlace.place) },
+                                        onNavigate = {
+                                            openNavigation(
+                                                context = context,
+                                                latitude = arPlace.place.latitude,
+                                                longitude = arPlace.place.longitude,
+                                            )
+                                        },
                                         onClick = {
                                             viewModel.onPlaceHighlighted(arPlace.place.placeId)
                                         },
@@ -655,7 +681,11 @@ fun RouteScreen(
                             showDetail = true
                         }
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = if (highlighted == null) {
+                        Modifier.align(Alignment.End)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
                 )
             }
         }
@@ -687,3 +717,16 @@ private sealed interface RouteResultState {
         }
     }
 }
+
+private fun openNavigation(context: Context, latitude: Double, longitude: Double) {
+    val destination = "$latitude,$longitude"
+    val navigation = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$destination"))
+        .setPackage(GOOGLE_MAPS_PACKAGE)
+    try {
+        context.startActivity(navigation)
+    } catch (_: ActivityNotFoundException) {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$destination")))
+    }
+}
+
+private const val GOOGLE_MAPS_PACKAGE = "com.google.android.apps.maps"

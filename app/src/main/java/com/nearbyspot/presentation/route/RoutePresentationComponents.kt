@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Refresh
@@ -62,10 +65,8 @@ import com.nearbyspot.presentation.util.DistanceFormatter
 import com.nearbyspot.presentation.util.DurationFormatter
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun RouteSummaryCard(
-    destinationName: String,
     distanceMeters: Int,
     durationSeconds: Int,
     resultCount: Int,
@@ -73,76 +74,40 @@ internal fun RouteSummaryCard(
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val destinationLabel = destinationName.ifBlank {
-        stringResource(R.string.route_destination_fallback)
-    }
     val refreshDescription = stringResource(
         if (isLoading) R.string.route_refreshing_stops else R.string.route_refresh_stops,
     )
+    val summary = buildList {
+        add(DistanceFormatter.format(distanceMeters))
+        add(DurationFormatter.route(durationSeconds))
+        if (resultCount > 0) {
+            add(pluralStringResource(R.plurals.route_verified_stops, resultCount, resultCount))
+        }
+    }.joinToString(separator = "  \u00B7  ")
     Surface(
         modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         shadowElevation = 4.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
-            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 8.dp),
-            verticalAlignment = Alignment.Top,
+            modifier = Modifier.padding(start = 16.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Route,
-                    contentDescription = null,
-                    modifier = Modifier.padding(10.dp).size(22.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(
-                        R.string.route_to_destination,
-                        destinationLabel,
-                    ),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = stringResource(R.string.route_popularity_rule),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    RouteMetricPill(
-                        icon = Icons.Filled.Straighten,
-                        text = DistanceFormatter.format(distanceMeters),
-                    )
-                    RouteMetricPill(
-                        icon = Icons.Filled.Schedule,
-                        text = DurationFormatter.route(durationSeconds),
-                    )
-                }
-                if (resultCount > 0) {
-                    Spacer(Modifier.height(8.dp))
-                    RouteMetricPill(
-                        icon = Icons.Filled.Verified,
-                        text = pluralStringResource(
-                            R.plurals.route_verified_stops, resultCount, resultCount,
-                        ),
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    )
-                }
-            }
+            Icon(
+                imageVector = Icons.Filled.Route,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = summary,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             IconButton(
                 onClick = onRefresh,
                 enabled = !isLoading,
@@ -262,11 +227,21 @@ internal fun RouteStopCard(
     rank: Int,
     routeFraction: Float,
     routeZoneLabel: String,
+    distanceAlongRouteMeters: Int,
     isHighlighted: Boolean,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    onNavigate: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val place = arPlace.place
+    val typeLabels = placeTypeLabelResIds(place.types).map { stringResource(it) }
+    val alongRouteLabel = stringResource(
+        R.string.route_along_route,
+        DistanceFormatter.format(distanceAlongRouteMeters),
+    )
+    val displayAddress = stripPlusCode(place.address)
     val aheadLabel = DurationFormatter.ahead(arPlace.reachableSeconds)
     val detourLabel = DurationFormatter.detour(arPlace.detourSeconds)
     val haptic = LocalHapticFeedback.current
@@ -290,12 +265,14 @@ internal fun RouteStopCard(
         stringResource(R.string.route_rank_accessibility, rank),
         routeZoneLabel,
         place.name,
-        place.address.takeIf(String::isNotBlank),
+        displayAddress.takeIf(String::isNotBlank),
         ratingLabel,
         priceLabel,
         openLabel,
+        typeLabels.joinToString().takeIf(String::isNotBlank),
         aheadLabel,
         detourLabel,
+        alongRouteLabel,
     ).joinToString()
 
     Card(
@@ -346,14 +323,40 @@ internal fun RouteStopCard(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
-                Text(
-                    text = routeZoneLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = routeZoneLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                            imageVector = if (isFavorite) {
+                                Icons.Filled.Favorite
+                            } else {
+                                Icons.Filled.FavoriteBorder
+                            },
+                            contentDescription = stringResource(
+                                if (isFavorite) R.string.route_unsave_stop else R.string.route_save_stop,
+                                place.name,
+                            ),
+                            tint = if (isFavorite) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    IconButton(onClick = onNavigate) {
+                        Icon(
+                            imageVector = Icons.Filled.Directions,
+                            contentDescription = stringResource(R.string.route_navigate_to, place.name),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
-            Spacer(Modifier.height(10.dp))
             Text(
                 text = place.name,
                 style = MaterialTheme.typography.titleMedium,
@@ -361,10 +364,19 @@ internal fun RouteStopCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (place.address.isNotBlank()) {
+            if (typeLabels.isNotEmpty()) {
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = place.address,
+                    text = typeLabels.joinToString(separator = " \u00B7 "),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
+            if (displayAddress.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = displayAddress,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -425,11 +437,15 @@ internal fun RouteStopCard(
                 RouteMetricPill(
                     icon = Icons.Filled.Route,
                     text = detourLabel,
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = alongRouteLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
             LinearProgressIndicator(
                 progress = { routeFraction.coerceIn(0f, 1f) },
                 modifier = Modifier
@@ -500,12 +516,43 @@ private fun RouteMetricPill(
     }
 }
 
+private val PlaceTypeLabels = mapOf(
+    "indian_restaurant" to R.string.place_type_indian,
+    "south_indian_restaurant" to R.string.place_type_south_indian,
+    "seafood_restaurant" to R.string.place_type_seafood,
+    "vegetarian_restaurant" to R.string.place_type_vegetarian,
+    "vegan_restaurant" to R.string.place_type_vegan,
+    "barbecue_restaurant" to R.string.place_type_barbecue,
+    "chinese_restaurant" to R.string.place_type_chinese,
+    "italian_restaurant" to R.string.place_type_italian,
+    "middle_eastern_restaurant" to R.string.place_type_middle_eastern,
+    "fast_food_restaurant" to R.string.place_type_fast_food,
+    "breakfast_restaurant" to R.string.place_type_breakfast,
+    "buffet_restaurant" to R.string.place_type_buffet,
+    "bar" to R.string.place_type_bar,
+    "cafe" to R.string.place_type_cafe,
+    "coffee_shop" to R.string.place_type_cafe,
+    "bakery" to R.string.place_type_bakery,
+    "ice_cream_shop" to R.string.place_type_ice_cream,
+)
+
+private const val MAX_PLACE_TYPE_LABELS = 2
+
+/** Short descriptors such as "Seafood" or "Bar", in the order the API ranked the place types. */
+internal fun placeTypeLabelResIds(types: List<String>): List<Int> =
+    types.mapNotNull(PlaceTypeLabels::get).distinct().take(MAX_PLACE_TYPE_LABELS)
+
 internal fun activeRouteFilterCount(filters: RouteFilterSettings): Int = listOf(
     filters.transportMode != TransportMode.DRIVE,
     filters.maxDetourMinutes != RouteFilterSettings().maxDetourMinutes,
     filters.maxPriceLevel != null,
     filters.openNowOnly,
 ).count { it }
+
+private val PlusCodePrefix = Regex("^[23456789CFGHJMPQRVWX]{2,8}\\+[23456789CFGHJMPQRVWX]{2,3},?\\s*")
+
+internal fun stripPlusCode(address: String): String =
+    address.replace(PlusCodePrefix, "").trim()
 
 private fun formatRouteReviewCount(count: Int): String = when {
     count >= 1_000 -> "${count / 1_000}.${(count % 1_000) / 100}k"

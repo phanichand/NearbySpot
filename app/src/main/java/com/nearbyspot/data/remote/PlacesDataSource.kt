@@ -24,6 +24,7 @@ import kotlin.coroutines.resumeWithException
 @Singleton
 class PlacesDataSource @Inject constructor(
     private val placesClient: PlacesClient,
+    private val usageBudget: PlacesUsageBudget,
 ) {
     suspend fun searchNearby(
         latitude: Double,
@@ -31,6 +32,7 @@ class PlacesDataSource @Inject constructor(
         radiusMeters: Double,
         placeTypes: List<String>,
     ): List<Place> = suspendCancellableCoroutine { cont ->
+        usageBudget.acquire()
         val center = LatLng(latitude, longitude)
         val bounds = CircularBounds.newInstance(center, radiusMeters)
 
@@ -69,6 +71,7 @@ class PlacesDataSource @Inject constructor(
         )
         val places = mutableListOf<Place>()
         for (placeType in placeTypes.distinct().take(MAX_ROUTE_SEARCH_TYPES)) {
+            usageBudget.acquire()
             val request = SearchByTextRequest.builder(
                 placeType.replace('_', ' '),
                 FIELDS,
