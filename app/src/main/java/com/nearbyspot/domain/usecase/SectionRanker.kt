@@ -76,7 +76,7 @@ object SectionRanker {
         }
     }
 
-    private fun adjustedScore(candidate: AlongRoutePlace): Double = timeAdjustedScore(
+    fun adjustedScore(candidate: AlongRoutePlace): Double = timeAdjustedScore(
         quality = quality(candidate),
         reachMinutes = candidate.reachableMinutes,
     )
