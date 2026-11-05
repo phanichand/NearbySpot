@@ -6,6 +6,7 @@ import com.nearbyspot.domain.model.AlongRoutePlace
 import com.nearbyspot.domain.model.Category
 import com.nearbyspot.domain.model.RouteFilterSettings
 import com.nearbyspot.domain.model.RouteInfo
+import com.nearbyspot.domain.model.RouteSection
 import com.nearbyspot.domain.model.RouteSearchProgress
 import com.nearbyspot.domain.model.RouteSearchFailure
 
@@ -23,6 +24,8 @@ data class RouteUiState(
     val currentRoutePointIndex: Int = 0,
     val selectedCategories: Set<Category> = setOf(Category.RESTAURANT),
     val filterSettings: RouteFilterSettings = RouteFilterSettings(),
+    val sections: List<RouteSection> = emptyList(),
+    val expandedSectionIndex: Int? = null,
     val alongRoutePlaces: List<AlongRoutePlace> = emptyList(),
     val highlightedPlaceId: String? = null,
     val selectedPlace: AlongRoutePlace? = null,

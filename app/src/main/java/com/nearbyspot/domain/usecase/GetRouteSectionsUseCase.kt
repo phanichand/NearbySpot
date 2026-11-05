@@ -63,12 +63,13 @@ class GetRouteSectionsUseCase(
                 status = SectionStatus.FAILED,
                 picks = emptyList(),
                 note = SectionNote.BUDGET_LIMITED.takeIf { error.failure.isBudgetLimit() },
+                failure = error.failure,
             )
         }
 
         val reachable = candidates.filter { it.reachableMinutes <= SectionRanker.MAX_REACH_MINUTES }
         if (reachable.isEmpty()) {
-            return section.copy(status = SectionStatus.NO_QUALIFYING_PLACE, picks = emptyList(), note = null)
+            return section.copy(status = SectionStatus.NO_QUALIFYING_PLACE, picks = emptyList(), note = null, failure = null)
         }
 
         val (recency, reviewsFailed) = recencyForFinalists(reachable)
@@ -77,6 +78,7 @@ class GetRouteSectionsUseCase(
             status = SectionStatus.LOADED,
             picks = picks,
             note = SectionNote.POPULAR_ONLY.takeIf { reviewsFailed },
+            failure = null,
         )
     }
 

@@ -123,6 +123,7 @@ class GetRouteSectionsUseCaseTest {
 
         assertEquals(SectionStatus.FAILED, loaded.status)
         assertEquals(SectionNote.BUDGET_LIMITED, loaded.note)
+        assertEquals(RouteSearchFailure.TRIP_LIMIT_REACHED, loaded.failure)
     }
 
     @Test
@@ -134,6 +135,7 @@ class GetRouteSectionsUseCaseTest {
 
         assertEquals(SectionStatus.FAILED, loaded.status)
         assertEquals(null, loaded.note)
+        assertEquals(RouteSearchFailure.TIMED_OUT, loaded.failure)
     }
 
     @Test

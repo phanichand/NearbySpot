@@ -26,4 +26,5 @@ data class RouteSection(
     val status: SectionStatus,
     val picks: List<SectionPick>,
     val note: SectionNote? = null,
+    val failure: RouteSearchFailure? = null,
 )
