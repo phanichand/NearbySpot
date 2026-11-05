@@ -9,6 +9,9 @@ import com.nearbyspot.domain.model.TravelInfo
 import kotlinx.coroutines.flow.Flow
 
 interface PlaceRepository {
+    /** Restarts the per-trip Places call ceiling; call when the traveller picks a new destination. */
+    fun beginTrip()
+
     suspend fun searchNearbyPlaces(
         latitude: Double,
         longitude: Double,

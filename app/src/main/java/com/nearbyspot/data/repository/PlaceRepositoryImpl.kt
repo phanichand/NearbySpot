@@ -165,6 +165,8 @@ class PlaceRepositoryImpl @Inject constructor(
         )
     }
 
+    override fun beginTrip() = placesDataSource.beginTrip()
+
     override suspend fun fetchReviews(placeId: String): List<com.nearbyspot.domain.model.Review> {
         return placesDataSource.fetchReviews(placeId)
     }

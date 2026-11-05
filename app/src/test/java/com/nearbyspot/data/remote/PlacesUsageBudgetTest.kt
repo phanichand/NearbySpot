@@ -46,4 +46,63 @@ class PlacesUsageBudgetTest {
 
         assertEquals(UsageStore.Usage("2026-10", 1), store.usage)
     }
+
+    private fun budgetWithTripLimit(tripLimit: Int, monthlyLimit: Int = 1_000) =
+        PlacesUsageBudget(store, currentMonth = { month }, monthlyLimit = monthlyLimit, tripLimit = tripLimit)
+
+    @Test
+    fun `trip ceiling refuses the next call with reason TRIP`() {
+        val tripBudget = budgetWithTripLimit(tripLimit = 2)
+        repeat(2) { tripBudget.acquire() }
+
+        val error = assertThrows(PlacesBudgetExhaustedException::class.java) { tripBudget.acquire() }
+
+        assertEquals(PlacesBudgetExhaustedException.Reason.TRIP, error.reason)
+        assertEquals(2, store.usage.calls)
+    }
+
+    @Test
+    fun `beginTrip resets the trip count but not the monthly count`() {
+        val tripBudget = budgetWithTripLimit(tripLimit = 2)
+        repeat(2) { tripBudget.acquire() }
+
+        tripBudget.beginTrip()
+        tripBudget.acquire()
+
+        assertEquals(3, store.usage.calls)
+    }
+
+    @Test
+    fun `release gives back one call and never goes below zero`() {
+        budget.acquire()
+        budget.acquire()
+
+        budget.release()
+        assertEquals(1, store.usage.calls)
+
+        budget.release()
+        budget.release()
+        assertEquals(0, store.usage.calls)
+    }
+
+    @Test
+    fun `release after a trip reset does not free trip headroom beyond zero`() {
+        val tripBudget = budgetWithTripLimit(tripLimit = 1)
+        tripBudget.acquire()
+        tripBudget.beginTrip()
+
+        tripBudget.release()
+        tripBudget.acquire()
+
+        assertThrows(PlacesBudgetExhaustedException::class.java) { tripBudget.acquire() }
+    }
+
+    @Test
+    fun `monthly exhaustion carries reason MONTHLY`() {
+        repeat(3) { budget.acquire() }
+
+        val error = assertThrows(PlacesBudgetExhaustedException::class.java) { budget.acquire() }
+
+        assertEquals(PlacesBudgetExhaustedException.Reason.MONTHLY, error.reason)
+    }
 }

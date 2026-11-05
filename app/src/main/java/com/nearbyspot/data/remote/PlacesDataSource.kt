@@ -56,6 +56,7 @@ class PlacesDataSource @Inject constructor(
             .addOnFailureListener { e ->
                 if (!cont.isActive) return@addOnFailureListener
                 Log.e(TAG, "Nearby search failed (${e.javaClass.simpleName})")
+                usageBudget.release()
                 cont.resumeWithException(e)
             }
     }
@@ -89,7 +90,9 @@ class PlacesDataSource @Inject constructor(
                         cont.resume(response.places.mapNotNull { it.toDomainPlaceOrNull() })
                     }
                     .addOnFailureListener { error ->
-                        if (cont.isActive) cont.resumeWithException(error)
+                        if (!cont.isActive) return@addOnFailureListener
+                        usageBudget.release()
+                        cont.resumeWithException(error)
                     }
             }
             places += results
@@ -97,11 +100,14 @@ class PlacesDataSource @Inject constructor(
         return places.distinctBy(Place::placeId)
     }
 
+    fun beginTrip() = usageBudget.beginTrip()
+
     fun getPhotoMetadatas(placeId: String): List<PhotoMetadata> {
         return photoMetadataCache[placeId] ?: emptyList()
     }
 
     suspend fun fetchReviews(placeId: String): List<Review> = suspendCancellableCoroutine { cont ->
+        usageBudget.acquire()
         val request = FetchPlaceRequest.builder(placeId, REVIEW_FIELDS).build()
         placesClient.fetchPlace(request)
             .addOnSuccessListener { response ->
@@ -119,6 +125,7 @@ class PlacesDataSource @Inject constructor(
             .addOnFailureListener { e ->
                 if (!cont.isActive) return@addOnFailureListener
                 Log.e(TAG, "Fetch reviews failed (${e.javaClass.simpleName})")
+                usageBudget.release()
                 cont.resume(emptyList())
             }
     }
