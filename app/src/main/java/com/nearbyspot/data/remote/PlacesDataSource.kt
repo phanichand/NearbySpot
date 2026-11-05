@@ -102,6 +102,8 @@ class PlacesDataSource @Inject constructor(
 
     fun beginTrip() = usageBudget.beginTrip()
 
+    fun endTrip() = usageBudget.endTrip()
+
     fun getPhotoMetadatas(placeId: String): List<PhotoMetadata> {
         return photoMetadataCache[placeId] ?: emptyList()
     }

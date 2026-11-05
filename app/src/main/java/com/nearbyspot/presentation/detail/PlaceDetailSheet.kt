@@ -62,6 +62,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.nearbyspot.domain.model.Place
 import com.nearbyspot.domain.model.RankedPlace
 import com.nearbyspot.domain.model.Review
+import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.presentation.components.RatingBar
 import com.nearbyspot.presentation.theme.StarYellow
 import com.nearbyspot.presentation.util.DistanceFormatter
@@ -108,6 +109,7 @@ fun PlaceDetailSheet(
     onToggleFavorite: (() -> Unit)? = null,
     onFetchReviews: (suspend (String) -> List<Review>)? = null,
     tripDestination: LatLng? = null,
+    transportMode: TransportMode = TransportMode.DRIVE,
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
@@ -283,6 +285,7 @@ fun PlaceDetailSheet(
                             MapsNavigationUrl.build(
                                 destination = tripDestination,
                                 waypoint = LatLng(place.latitude, place.longitude),
+                                mode = transportMode,
                             )
                         } else {
                             "google.navigation:q=${place.latitude},${place.longitude}"

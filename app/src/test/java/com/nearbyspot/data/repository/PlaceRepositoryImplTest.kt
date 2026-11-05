@@ -6,6 +6,7 @@ import com.nearbyspot.data.local.PlaceEntity
 import com.nearbyspot.data.remote.PlacesDataSource
 import com.nearbyspot.data.remote.RoutesApiService
 import com.nearbyspot.domain.model.Place
+import com.nearbyspot.domain.model.PlacesBudgetExhaustedException
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.just
@@ -70,6 +71,13 @@ class PlaceRepositoryImplTest {
             placesDataSource.searchNearby(12.9716, 77.5946, 1_000.0, listOf("restaurant"))
         }
         coVerify(exactly = 1) { placeDao.insertPlaces(match { it.single().placeId == "remote" }) }
+    }
+
+    @Test
+    fun `reviews are empty instead of failing when the Places budget is exhausted`() = runTest {
+        coEvery { placesDataSource.fetchReviews(any()) } throws PlacesBudgetExhaustedException()
+
+        assertEquals(emptyList<com.nearbyspot.domain.model.Review>(), repository.fetchReviews("place"))
     }
 
     private fun cachedEntity(json: String) = PlaceEntity(

@@ -466,6 +466,7 @@ class RouteViewModel @Inject constructor(
         searchJob?.cancel()
         cancelSectionJobs()
         locationTrackingJob?.cancel()
+        repository.endTrip()
         super.onCleared()
     }
 

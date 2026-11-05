@@ -12,6 +12,9 @@ interface PlaceRepository {
     /** Restarts the per-trip Places call ceiling; call when the traveller picks a new destination. */
     fun beginTrip()
 
+    /** Ends the trip so later searches (such as Home) are not held to its call ceiling. */
+    fun endTrip()
+
     suspend fun searchNearbyPlaces(
         latitude: Double,
         longitude: Double,

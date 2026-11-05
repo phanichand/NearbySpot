@@ -63,6 +63,7 @@ class RouteViewModelTest {
     fun setUp() {
         every { repository.observeFavoriteIds() } returns emptyFlow()
         every { repository.beginTrip() } just Runs
+        every { repository.endTrip() } just Runs
         every { locationHelper.observeLocation(any()) } returns emptyFlow()
         coEvery { getRouteSectionsUseCase(any(), any(), any(), any()) } coAnswers { loaded(secondArg()) }
 

@@ -1,6 +1,7 @@
 package com.nearbyspot.util
 
 import com.google.android.gms.maps.model.LatLng
+import com.nearbyspot.domain.model.TransportMode
 import java.util.Locale
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -58,5 +59,14 @@ class MapsNavigationUrlTest {
             "https://www.google.com/maps/dir/?api=1&destination=12.123457,77&travelmode=driving",
             url,
         )
+    }
+
+    @Test
+    fun `travel mode follows the selected transport mode`() {
+        val walking = MapsNavigationUrl.build(LatLng(1.0, 2.0), null, TransportMode.WALK)
+        val cycling = MapsNavigationUrl.build(LatLng(1.0, 2.0), null, TransportMode.BICYCLE)
+
+        assertEquals("https://www.google.com/maps/dir/?api=1&destination=1,2&travelmode=walking", walking)
+        assertEquals("https://www.google.com/maps/dir/?api=1&destination=1,2&travelmode=bicycling", cycling)
     }
 }

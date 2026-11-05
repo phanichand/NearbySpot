@@ -1,6 +1,7 @@
 package com.nearbyspot.util
 
 import com.google.android.gms.maps.model.LatLng
+import com.nearbyspot.domain.model.TransportMode
 import java.math.BigDecimal
 import java.math.RoundingMode
 
@@ -9,11 +10,21 @@ object MapsNavigationUrl {
     private const val COORDINATE_DECIMALS = 6
 
     /** Directions to [destination], optionally passing through [waypoint], for Google Maps. */
-    fun build(destination: LatLng, waypoint: LatLng?): String = buildString {
+    fun build(
+        destination: LatLng,
+        waypoint: LatLng?,
+        mode: TransportMode = TransportMode.DRIVE,
+    ): String = buildString {
         append(BASE)
         append("&destination=").append(format(destination))
         if (waypoint != null) append("&waypoints=").append(format(waypoint))
-        append("&travelmode=driving")
+        append("&travelmode=").append(travelMode(mode))
+    }
+
+    private fun travelMode(mode: TransportMode) = when (mode) {
+        TransportMode.DRIVE -> "driving"
+        TransportMode.WALK -> "walking"
+        TransportMode.BICYCLE -> "bicycling"
     }
 
     private fun format(point: LatLng) = "${coordinate(point.latitude)},${coordinate(point.longitude)}"

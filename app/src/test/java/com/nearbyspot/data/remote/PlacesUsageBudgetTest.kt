@@ -53,6 +53,7 @@ class PlacesUsageBudgetTest {
     @Test
     fun `trip ceiling refuses the next call with reason TRIP`() {
         val tripBudget = budgetWithTripLimit(tripLimit = 2)
+        tripBudget.beginTrip()
         repeat(2) { tripBudget.acquire() }
 
         val error = assertThrows(PlacesBudgetExhaustedException::class.java) { tripBudget.acquire() }
@@ -64,6 +65,7 @@ class PlacesUsageBudgetTest {
     @Test
     fun `beginTrip resets the trip count but not the monthly count`() {
         val tripBudget = budgetWithTripLimit(tripLimit = 2)
+        tripBudget.beginTrip()
         repeat(2) { tripBudget.acquire() }
 
         tripBudget.beginTrip()
@@ -88,6 +90,7 @@ class PlacesUsageBudgetTest {
     @Test
     fun `release after a trip reset does not free trip headroom beyond zero`() {
         val tripBudget = budgetWithTripLimit(tripLimit = 1)
+        tripBudget.beginTrip()
         tripBudget.acquire()
         tripBudget.beginTrip()
 
@@ -104,5 +107,21 @@ class PlacesUsageBudgetTest {
         val error = assertThrows(PlacesBudgetExhaustedException::class.java) { budget.acquire() }
 
         assertEquals(PlacesBudgetExhaustedException.Reason.MONTHLY, error.reason)
+    }
+
+    @Test
+    fun `the trip ceiling only applies while a trip is active`() {
+        val tripBudget = budgetWithTripLimit(tripLimit = 1)
+
+        repeat(3) { tripBudget.acquire() }
+        assertEquals(3, store.usage.calls)
+
+        tripBudget.beginTrip()
+        tripBudget.acquire()
+        assertThrows(PlacesBudgetExhaustedException::class.java) { tripBudget.acquire() }
+
+        tripBudget.endTrip()
+        tripBudget.acquire()
+        assertEquals(5, store.usage.calls)
     }
 }

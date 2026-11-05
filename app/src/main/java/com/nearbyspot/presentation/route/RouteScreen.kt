@@ -81,6 +81,7 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import com.nearbyspot.R
 import com.nearbyspot.domain.model.AlongRoutePlace
 import com.nearbyspot.domain.model.SectionStatus
+import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.presentation.components.CategoryChipRow
 import com.nearbyspot.presentation.components.DestinationSearchBar
 import com.nearbyspot.presentation.detail.PlaceDetailSheet
@@ -151,6 +152,7 @@ fun RouteScreen(
             onToggleFavorite = { viewModel.onToggleFavorite(arPlace.place) },
             onFetchReviews = viewModel::fetchReviews,
             tripDestination = state.destinationLatLng,
+            transportMode = state.filterSettings.transportMode,
         )
     }
 
@@ -625,6 +627,7 @@ fun RouteScreen(
                                         latitude = place.latitude,
                                         longitude = place.longitude,
                                         tripDestination = state.destinationLatLng,
+                                        transportMode = state.filterSettings.transportMode,
                                     )
                                 },
                             )
@@ -687,10 +690,11 @@ private fun openNavigation(
     latitude: Double,
     longitude: Double,
     tripDestination: LatLng? = null,
+    transportMode: TransportMode = TransportMode.DRIVE,
 ) {
     val destination = "$latitude,$longitude"
     val uri = if (tripDestination != null) {
-        Uri.parse(MapsNavigationUrl.build(tripDestination, waypoint = LatLng(latitude, longitude)))
+        Uri.parse(MapsNavigationUrl.build(tripDestination, waypoint = LatLng(latitude, longitude), mode = transportMode))
     } else {
         Uri.parse("google.navigation:q=$destination")
     }

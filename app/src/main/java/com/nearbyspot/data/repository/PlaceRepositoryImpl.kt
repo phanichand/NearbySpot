@@ -17,6 +17,7 @@ import com.nearbyspot.data.remote.dto.Waypoint
 import com.nearbyspot.data.remote.dto.WaypointLocation
 import com.nearbyspot.domain.model.GeoPoint
 import com.nearbyspot.domain.model.Place
+import com.nearbyspot.domain.model.PlacesBudgetExhaustedException
 import com.nearbyspot.domain.model.RouteInfo
 import com.nearbyspot.domain.model.RouteMatrixEntry
 import com.nearbyspot.domain.model.TransportMode
@@ -167,8 +168,14 @@ class PlaceRepositoryImpl @Inject constructor(
 
     override fun beginTrip() = placesDataSource.beginTrip()
 
+    override fun endTrip() = placesDataSource.endTrip()
+
     override suspend fun fetchReviews(placeId: String): List<com.nearbyspot.domain.model.Review> {
-        return placesDataSource.fetchReviews(placeId)
+        return try {
+            placesDataSource.fetchReviews(placeId)
+        } catch (_: PlacesBudgetExhaustedException) {
+            emptyList()
+        }
     }
 
     override suspend fun saveFavorite(place: Place) {

@@ -48,6 +48,7 @@ class PlacesUsageBudget(
     private val tripLimit: Int = TRIP_CALL_LIMIT,
 ) {
     private var tripCalls = 0
+    private var tripActive = false
 
     @Inject
     constructor(@ApplicationContext context: Context) : this(
@@ -61,6 +62,14 @@ class PlacesUsageBudget(
     /** Starts a new trip: its call ceiling restarts, the monthly count does not. */
     @Synchronized
     fun beginTrip() {
+        tripActive = true
+        tripCalls = 0
+    }
+
+    /** Ends the trip; calls made outside a trip (such as Home searches) have no trip ceiling. */
+    @Synchronized
+    fun endTrip() {
+        tripActive = false
         tripCalls = 0
     }
 
@@ -73,11 +82,11 @@ class PlacesUsageBudget(
         if (used >= monthlyLimit) {
             throw PlacesBudgetExhaustedException(PlacesBudgetExhaustedException.Reason.MONTHLY)
         }
-        if (tripCalls >= tripLimit) {
+        if (tripActive && tripCalls >= tripLimit) {
             throw PlacesBudgetExhaustedException(PlacesBudgetExhaustedException.Reason.TRIP)
         }
         store.write(UsageStore.Usage(month, used + 1))
-        tripCalls++
+        if (tripActive) tripCalls++
     }
 
     /** Gives back the most recent [acquire] when its request failed before being billed. */
