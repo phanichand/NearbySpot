@@ -58,12 +58,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.maps.model.LatLng
 import com.nearbyspot.domain.model.Place
 import com.nearbyspot.domain.model.RankedPlace
 import com.nearbyspot.domain.model.Review
 import com.nearbyspot.presentation.components.RatingBar
 import com.nearbyspot.presentation.theme.StarYellow
 import com.nearbyspot.presentation.util.DistanceFormatter
+import com.nearbyspot.util.MapsNavigationUrl
 import com.nearbyspot.util.PlacePhotoProvider
 import kotlin.math.roundToInt
 
@@ -105,6 +107,7 @@ fun PlaceDetailSheet(
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
     onFetchReviews: (suspend (String) -> List<Review>)? = null,
+    tripDestination: LatLng? = null,
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
@@ -276,7 +279,14 @@ fun PlaceDetailSheet(
             Button(
                 onClick = {
                     val gmmUri = Uri.parse(
-                        "google.navigation:q=${place.latitude},${place.longitude}"
+                        if (tripDestination != null) {
+                            MapsNavigationUrl.build(
+                                destination = tripDestination,
+                                waypoint = LatLng(place.latitude, place.longitude),
+                            )
+                        } else {
+                            "google.navigation:q=${place.latitude},${place.longitude}"
+                        },
                     )
                     val mapsIntent = Intent(Intent.ACTION_VIEW, gmmUri).apply {
                         setPackage("com.google.android.apps.maps")

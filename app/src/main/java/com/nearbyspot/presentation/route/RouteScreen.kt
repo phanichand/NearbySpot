@@ -78,6 +78,7 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
+import com.nearbyspot.util.MapsNavigationUrl
 import com.nearbyspot.domain.model.RouteSearchProgress
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.nearbyspot.R
@@ -151,6 +152,7 @@ fun RouteScreen(
             isFavorite = state.favoriteIds.contains(arPlace.place.placeId),
             onToggleFavorite = { viewModel.onToggleFavorite(arPlace.place) },
             onFetchReviews = viewModel::fetchReviews,
+            tripDestination = state.destinationLatLng,
         )
     }
 
@@ -656,6 +658,7 @@ fun RouteScreen(
                                                 context = context,
                                                 latitude = arPlace.place.latitude,
                                                 longitude = arPlace.place.longitude,
+                                                tripDestination = state.destinationLatLng,
                                             )
                                         },
                                         onClick = {
@@ -718,10 +721,19 @@ private sealed interface RouteResultState {
     }
 }
 
-private fun openNavigation(context: Context, latitude: Double, longitude: Double) {
+private fun openNavigation(
+    context: Context,
+    latitude: Double,
+    longitude: Double,
+    tripDestination: LatLng? = null,
+) {
     val destination = "$latitude,$longitude"
-    val navigation = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$destination"))
-        .setPackage(GOOGLE_MAPS_PACKAGE)
+    val uri = if (tripDestination != null) {
+        Uri.parse(MapsNavigationUrl.build(tripDestination, waypoint = LatLng(latitude, longitude)))
+    } else {
+        Uri.parse("google.navigation:q=$destination")
+    }
+    val navigation = Intent(Intent.ACTION_VIEW, uri).setPackage(GOOGLE_MAPS_PACKAGE)
     try {
         context.startActivity(navigation)
     } catch (_: ActivityNotFoundException) {
