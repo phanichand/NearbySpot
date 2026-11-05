@@ -47,10 +47,11 @@ class RouteSectionPresentationTest {
     }
 
     @Test
-    fun `later section title rounds hours ahead and is at least one`() {
-        assertEquals(SectionTitle.HoursIn(1), sectionTitle(2_700))
-        assertEquals(SectionTitle.HoursIn(2), sectionTitle(6_300))
-        assertEquals(SectionTitle.HoursIn(5), sectionTitle(17_100))
+    fun `later section title shows minutes ahead rounded to 5`() {
+        assertEquals(SectionTitle.Ahead(45), sectionTitle(2_700))
+        assertEquals(SectionTitle.Ahead(90), sectionTitle(5_400))
+        assertEquals(SectionTitle.Ahead(285), sectionTitle(17_100))
+        assertEquals(SectionTitle.Ahead(135), sectionTitle(8_130))
     }
 
     @Test

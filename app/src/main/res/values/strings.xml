@@ -112,7 +112,9 @@
         <item quantity="other">%1$d verified stops</item>
     </plurals>
     <string name="route_timeline_next_stop">Next stop</string>
+    <string name="route_timeline_minutes_in">~%1$d min in</string>
     <string name="route_timeline_hours_in">~%1$dh in</string>
+    <string name="route_timeline_hours_minutes_in">~%1$dh %2$02dm in</string>
     <string name="route_timeline_loading">Looking for stops…</string>
     <string name="route_timeline_empty">Nothing qualifying within 45 minutes</string>
     <string name="route_timeline_failed">Couldn’t load stops. Tap to retry</string>

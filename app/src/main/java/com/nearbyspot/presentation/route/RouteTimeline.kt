@@ -84,7 +84,15 @@ internal fun RouteTimeline(
 private fun SectionHeader(section: RouteSection, onClick: () -> Unit) {
     val title = when (val title = sectionTitle(section.aheadSeconds)) {
         SectionTitle.NextStop -> stringResource(R.string.route_timeline_next_stop)
-        is SectionTitle.HoursIn -> stringResource(R.string.route_timeline_hours_in, title.hours)
+        is SectionTitle.Ahead -> when {
+            title.minutes < 60 -> stringResource(R.string.route_timeline_minutes_in, title.minutes)
+            title.minutes % 60 == 0 -> stringResource(R.string.route_timeline_hours_in, title.minutes / 60)
+            else -> stringResource(
+                R.string.route_timeline_hours_minutes_in,
+                title.minutes / 60,
+                title.minutes % 60,
+            )
+        }
     }
     val status = when (section.status) {
         SectionStatus.NOT_LOADED -> stringResource(R.string.route_timeline_tap_to_load)

@@ -5,10 +5,14 @@ import com.nearbyspot.domain.model.RouteSection
 import com.nearbyspot.domain.model.SectionStatus
 import com.nearbyspot.util.PolylineUtils
 
-/** Splits the drive ahead into a "next stop" section followed by roughly hourly sections. */
+/**
+ * Splits the drive ahead into a "next stop" section followed by contiguous 45-minute sections, so
+ * the 45-minute reach limit measured from each section's start leaves no gaps between them.
+ */
 object SectionPlanner {
     const val HORIZON_SECONDS = 18_000
-    const val SECTION_SECONDS = 3_600
+    const val SECTION_SECONDS = 2_700
+    private const val MIN_TAIL_SECONDS = 900
     private const val NEXT_STOP_SECONDS = SectionRanker.MAX_REACH_MINUTES * 60
     private const val FALLBACK_SPEED_METERS_PER_SECOND = 15.0
 
@@ -41,9 +45,15 @@ object SectionPlanner {
             return if (offset < 0) points.lastIndex else current + offset
         }
 
-        val starts = listOf(0) + generateSequence(NEXT_STOP_SECONDS) { it + SECTION_SECONDS }
+        val allStarts = listOf(0) + generateSequence(NEXT_STOP_SECONDS) { it + SECTION_SECONDS }
             .takeWhile { it < limitSeconds }
             .toList()
+        // A stub of a few minutes at the end is folded into the section before it.
+        val starts = if (allStarts.size > 1 && limitSeconds - allStarts.last() < MIN_TAIL_SECONDS) {
+            allStarts.dropLast(1)
+        } else {
+            allStarts
+        }
         return starts.mapIndexed { index, start ->
             val end = starts.getOrNull(index + 1) ?: limitSeconds
             RouteSection(

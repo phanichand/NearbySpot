@@ -32,12 +32,12 @@ class SectionPlannerTest {
     )
 
     @Test
-    fun `a 3 hour route yields a 45 minute first section then hourly sections`() {
+    fun `a 3 hour route yields contiguous 45 minute sections`() {
         val route = route(10_800)
 
         val sections = SectionPlanner.plan(route, currentRouteIndex = 0, speedMetersPerSecond = SPEED.toDouble())
 
-        assertEquals(listOf(0, 2_700, 6_300, 9_900), sections.map { it.aheadSeconds })
+        assertEquals(listOf(0, 2_700, 5_400, 8_100), sections.map { it.aheadSeconds })
         assertEquals(listOf(0, 1, 2, 3), sections.map { it.index })
         assertTrue(sections.all { it.status == SectionStatus.NOT_LOADED && it.picks.isEmpty() })
         assertTrue(sections.zipWithNext().all { (a, b) -> a.startRouteIndex < b.startRouteIndex })
@@ -67,7 +67,7 @@ class SectionPlannerTest {
         val fromNull = SectionPlanner.plan(route(7_200), 0, null)
         val fromZero = SectionPlanner.plan(route(7_200), 0, 0.0)
 
-        assertEquals(listOf(0, 2_700, 6_300), fromNull.map { it.aheadSeconds })
+        assertEquals(listOf(0, 2_700, 5_400), fromNull.map { it.aheadSeconds })
         assertEquals(fromNull, fromZero)
     }
 
@@ -75,8 +75,8 @@ class SectionPlannerTest {
     fun `the horizon limits how many sections are planned`() {
         val sections = SectionPlanner.plan(route(39_600), 0, SPEED.toDouble())
 
-        assertEquals(6, sections.size)
-        assertEquals(17_100, sections.last().aheadSeconds)
+        assertEquals(7, sections.size)
+        assertEquals(16_200, sections.last().aheadSeconds)
     }
 
     @Test
@@ -88,7 +88,24 @@ class SectionPlannerTest {
             horizonSeconds = 39_600,
         )
 
-        assertTrue(sections.size > 6)
+        assertTrue(sections.size > 7)
+    }
+
+    @Test
+    fun `a tail shorter than 15 minutes folds into the previous section`() {
+        val route = route(3_000)
+
+        val sections = SectionPlanner.plan(route, 0, SPEED.toDouble())
+
+        assertEquals(1, sections.size)
+        assertEquals(route.decodedPoints.lastIndex, sections.single().endRouteIndex)
+    }
+
+    @Test
+    fun `a tail of 15 minutes or more stays its own section`() {
+        val sections = SectionPlanner.plan(route(3_700), 0, SPEED.toDouble())
+
+        assertEquals(listOf(0, 2_700), sections.map { it.aheadSeconds })
     }
 
     @Test
