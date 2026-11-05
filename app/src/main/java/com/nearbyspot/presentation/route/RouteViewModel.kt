@@ -363,6 +363,8 @@ class RouteViewModel @Inject constructor(
                                 "Route search is temporarily unavailable. Please try again."
                             RouteSearchFailure.MONTHLY_LIMIT_REACHED ->
                                 "You've reached this month's search limit. It resets next month."
+                            RouteSearchFailure.TRIP_LIMIT_REACHED ->
+                                "You've used this trip's search allowance. Pick a new destination to start again."
                         },
                     )
                 }

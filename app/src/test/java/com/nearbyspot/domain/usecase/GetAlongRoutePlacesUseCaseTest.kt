@@ -619,6 +619,52 @@ class GetAlongRoutePlacesUseCaseTest {
         }
     }
 
+    @Test
+    fun `budget error after the first anchor still returns the places already found`() = runTest {
+        val calls = AtomicInteger()
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } coAnswers {
+            if (calls.incrementAndGet() == 1) {
+                listOf(place("kept"))
+            } else {
+                throw PlacesBudgetExhaustedException()
+            }
+        }
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 600, 500, 10_000)
+        }
+
+        val result = useCase(longRoute(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings())
+
+        assertEquals(listOf("kept"), result.map { it.place.placeId })
+    }
+
+    @Test
+    fun `along route budget error falls back to the destination search results`() = runTest {
+        coEvery { repository.searchAlongRoute(any(), any()) } throws PlacesBudgetExhaustedException()
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } returns
+            listOf(place("destination-side", latitude = 1.99, longitude = 0.0))
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 3_000, 500, 10_000)
+        }
+
+        val result = useCase(longEncodedRoute(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings())
+
+        assertEquals(listOf("destination-side"), result.map { it.place.placeId })
+    }
+
+    @Test
+    fun `trip budget error with nothing found is a non retryable typed failure`() = runTest {
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } throws
+            PlacesBudgetExhaustedException(PlacesBudgetExhaustedException.Reason.TRIP)
+
+        val failure = runCatching {
+            useCase(route(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings())
+        }.exceptionOrNull() as RouteSearchException
+
+        assertEquals(RouteSearchFailure.TRIP_LIMIT_REACHED, failure.failure)
+        assertEquals(false, failure.retryable)
+    }
+
     private fun matrixFor(
         origins: List<GeoPoint>,
         destinations: List<GeoPoint>,

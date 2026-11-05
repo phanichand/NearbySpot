@@ -19,6 +19,7 @@ enum class RouteSearchFailure {
     TIMED_OUT,
     SERVICE_UNAVAILABLE,
     MONTHLY_LIMIT_REACHED,
+    TRIP_LIMIT_REACHED,
 }
 
 class RouteSearchException(
@@ -33,5 +34,6 @@ class RouteSearchException(
         RouteSearchFailure.SERVICE_UNAVAILABLE ->
             "Route stop search is temporarily unavailable"
         RouteSearchFailure.MONTHLY_LIMIT_REACHED -> "Monthly search budget reached"
+        RouteSearchFailure.TRIP_LIMIT_REACHED -> "Trip search budget reached"
     },
 )

@@ -15,6 +15,7 @@ import com.nearbyspot.domain.model.RouteSearchProgress
 import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.domain.repository.PlaceRepository
 import com.nearbyspot.util.PolylineUtils
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import kotlin.math.log10
 import kotlinx.coroutines.CancellationException
@@ -62,7 +63,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
             throw error
         } catch (error: PlacesBudgetExhaustedException) {
             outcome = RouteSearchDiagnostics.Outcome.FAILURE
-            throw RouteSearchException(RouteSearchFailure.MONTHLY_LIMIT_REACHED, retryable = false)
+            throw BudgetSignal.failureFor(error.reason)
         } catch (error: Exception) {
             outcome = RouteSearchDiagnostics.Outcome.FAILURE
             throw RouteSearchException(RouteSearchFailure.SERVICE_UNAVAILABLE)
@@ -83,6 +84,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         diagnostics: RouteSearchDiagnostics,
         onProgress: (RouteSearchProgress) -> Unit,
     ): List<AlongRoutePlace> = coroutineScope {
+        val budgetSignal = BudgetSignal()
         onProgress(RouteSearchProgress.Planning)
         val destination = routeInfo.decodedPoints.last()
         val coverageAnchors = diagnostics.measure(RouteSearchDiagnostics.Stage.WAYPOINT_PLANNING) {
@@ -105,7 +107,8 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (budget: PlacesBudgetExhaustedException) {
-                throw budget
+                budgetSignal.record(budget)
+                null
             } catch (_: Exception) {
                 diagnostics.increment(RouteSearchDiagnostics.Counter.PARTIAL_FAILURES)
                 null
@@ -128,7 +131,8 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (budget: PlacesBudgetExhaustedException) {
-                throw budget
+                budgetSignal.record(budget)
+                null
             } catch (_: Exception) {
                 diagnostics.increment(RouteSearchDiagnostics.Counter.PARTIAL_FAILURES)
                 null
@@ -198,6 +202,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
                                     anchor = anchor.point,
                                     placeTypes = placeTypes,
                                     diagnostics = diagnostics,
+                                    budgetSignal = budgetSignal,
                                 )
                                 if (places != null) {
                                     diagnostics.increment(
@@ -228,6 +233,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
                 placeTypes = placeTypes,
                 filters = filters,
                 diagnostics = diagnostics,
+                budgetSignal = budgetSignal,
             )
             initialDiscoveries + supplementalDiscoveries + gapDiscoveries
         } else {
@@ -261,6 +267,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
                                 anchor = anchor.point,
                                 placeTypes = placeTypes,
                                 diagnostics = diagnostics,
+                                budgetSignal = budgetSignal,
                             )
 
                             if (places != null) {
@@ -280,7 +287,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         }
 
         if (discoveries.all { it.places == null }) {
-            throw RouteSearchException(RouteSearchFailure.ALL_ANCHORS_FAILED)
+            throw budgetSignal.failure() ?: RouteSearchException(RouteSearchFailure.ALL_ANCHORS_FAILED)
         }
 
         diagnostics.increment(
@@ -303,6 +310,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
             )
         }
         if (candidates.isEmpty()) {
+            budgetSignal.failure()?.let { throw it }
             onProgress(RouteSearchProgress.Complete)
             return@coroutineScope emptyList()
         }
@@ -398,6 +406,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
             remainingSeconds = baselineSeconds,
         )
             .also { results ->
+                if (results.isEmpty()) budgetSignal.failure()?.let { throw it }
                 diagnostics.increment(RouteSearchDiagnostics.Counter.FINAL_RESULTS, results.size)
                 onProgress(RouteSearchProgress.Complete)
             }
@@ -460,6 +469,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         placeTypes: List<String>,
         filters: RouteFilterSettings,
         diagnostics: RouteSearchDiagnostics,
+        budgetSignal: BudgetSignal,
     ): List<AnchorDiscovery> {
         val points = routeInfo.decodedPoints
         val lastIndex = points.lastIndex
@@ -499,6 +509,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
                             anchor = midpoint,
                             placeTypes = placeTypes,
                             diagnostics = diagnostics,
+                            budgetSignal = budgetSignal,
                             radiusMeters = GAP_FILL_RADIUS_METERS,
                         ),
                     )
@@ -511,6 +522,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         anchor: LatLng,
         placeTypes: List<String>,
         diagnostics: RouteSearchDiagnostics,
+        budgetSignal: BudgetSignal,
         radiusMeters: Double = SEARCH_RADIUS_METERS,
     ): List<Place>? = try {
         withTimeoutOrNull(ANCHOR_SEARCH_TIMEOUT_MS) {
@@ -524,7 +536,8 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
     } catch (cancellation: CancellationException) {
         throw cancellation
     } catch (budget: PlacesBudgetExhaustedException) {
-        throw budget
+        budgetSignal.record(budget)
+        null
     } catch (_: Exception) {
         diagnostics.increment(RouteSearchDiagnostics.Counter.PARTIAL_FAILURES)
         null
@@ -596,6 +609,27 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
     )
 
     private class AnchorSearchTimeoutException : Exception()
+
+    /** Remembers that a budget ran out mid-search so results found so far can still be returned. */
+    private class BudgetSignal {
+        private val reason = AtomicReference<PlacesBudgetExhaustedException.Reason?>(null)
+
+        fun record(error: PlacesBudgetExhaustedException) {
+            reason.compareAndSet(null, error.reason)
+        }
+
+        fun failure(): RouteSearchException? = reason.get()?.let(::failureFor)
+
+        companion object {
+            fun failureFor(reason: PlacesBudgetExhaustedException.Reason) = RouteSearchException(
+                when (reason) {
+                    PlacesBudgetExhaustedException.Reason.MONTHLY -> RouteSearchFailure.MONTHLY_LIMIT_REACHED
+                    PlacesBudgetExhaustedException.Reason.TRIP -> RouteSearchFailure.TRIP_LIMIT_REACHED
+                },
+                retryable = false,
+            )
+        }
+    }
 
     companion object {
         private const val TAG = "AlongRoutePlaces"
