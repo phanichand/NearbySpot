@@ -36,6 +36,8 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         currentRouteIndex: Int,
         placeTypes: List<String>,
         filters: RouteFilterSettings,
+        skipTooCloseToStart: Boolean = false,
+        onBudgetLimited: () -> Unit = {},
         onProgress: (RouteSearchProgress) -> Unit = {},
     ): List<AlongRoutePlace> {
         val diagnostics = RouteSearchDiagnostics { summary ->
@@ -53,6 +55,8 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
                     filters = filters,
                     diagnostics = diagnostics,
                     onProgress = onProgress,
+                    skipTooCloseToStart = skipTooCloseToStart,
+                    onBudgetLimited = onBudgetLimited,
                 )
             } ?: throw RouteSearchException(RouteSearchFailure.TIMED_OUT)
         } catch (cancellation: CancellationException) {
@@ -83,6 +87,8 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         filters: RouteFilterSettings,
         diagnostics: RouteSearchDiagnostics,
         onProgress: (RouteSearchProgress) -> Unit,
+        skipTooCloseToStart: Boolean,
+        onBudgetLimited: () -> Unit,
     ): List<AlongRoutePlace> = coroutineScope {
         val budgetSignal = BudgetSignal()
         onProgress(RouteSearchProgress.Planning)
@@ -376,7 +382,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
             if (verified.detourSeconds / 60.0 > filters.maxDetourMinutes) {
                 return@mapNotNull null
             }
-            if (isTooCloseToStart(verified.reachSeconds, baselineSeconds)) {
+            if (!skipTooCloseToStart && isTooCloseToStart(verified.reachSeconds, baselineSeconds)) {
                 return@mapNotNull null
             }
             AlongRoutePlace(
@@ -407,6 +413,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         )
             .also { results ->
                 if (results.isEmpty()) budgetSignal.failure()?.let { throw it }
+                if (budgetSignal.isSet()) onBudgetLimited()
                 diagnostics.increment(RouteSearchDiagnostics.Counter.FINAL_RESULTS, results.size)
                 onProgress(RouteSearchProgress.Complete)
             }
@@ -617,6 +624,8 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         fun record(error: PlacesBudgetExhaustedException) {
             reason.compareAndSet(null, error.reason)
         }
+
+        fun isSet(): Boolean = reason.get() != null
 
         fun failure(): RouteSearchException? = reason.get()?.let(::failureFor)
 

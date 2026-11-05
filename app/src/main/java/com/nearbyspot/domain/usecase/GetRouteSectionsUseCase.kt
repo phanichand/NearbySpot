@@ -11,6 +11,7 @@ import com.nearbyspot.domain.model.RouteSection
 import com.nearbyspot.domain.model.SectionNote
 import com.nearbyspot.domain.model.SectionStatus
 import com.nearbyspot.domain.repository.PlaceRepository
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -26,6 +27,8 @@ class GetRouteSectionsUseCase(
     private val repository: PlaceRepository,
     private val clock: () -> Long,
 ) {
+    private val reviewCache = ConcurrentHashMap<String, List<Review>>()
+
     @Inject
     constructor(
         alongRoute: GetAlongRoutePlacesUseCase,
@@ -48,6 +51,7 @@ class GetRouteSectionsUseCase(
             decodedPoints = sectionPoints,
         )
 
+        var budgetLimited = false
         val candidates = try {
             alongRoute(
                 routeInfo = slice,
@@ -55,6 +59,8 @@ class GetRouteSectionsUseCase(
                 currentRouteIndex = 0,
                 placeTypes = placeTypes,
                 filters = filters,
+                skipTooCloseToStart = true,
+                onBudgetLimited = { budgetLimited = true },
             )
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -67,17 +73,26 @@ class GetRouteSectionsUseCase(
             )
         }
 
-        val reachable = candidates.filter { it.reachableMinutes <= SectionRanker.MAX_REACH_MINUTES }
+        // Slice positions are re-based to the full route so later steps can tell where a pick lies.
+        val reachable = candidates
+            .map { it.copy(nearestRoutePointIndex = it.nearestRoutePointIndex + section.startRouteIndex) }
+            .filter { it.reachableMinutes <= SectionRanker.MAX_REACH_MINUTES }
         if (reachable.isEmpty()) {
             return section.copy(status = SectionStatus.NO_QUALIFYING_PLACE, picks = emptyList(), note = null, failure = null)
         }
 
         val (recency, reviewsFailed) = recencyForFinalists(reachable)
-        val picks = SectionRanker.rank(reachable, recency)
+        val picks = SectionRanker.rank(reachable, recency).map {
+            it.copy(timeAheadSeconds = section.aheadSeconds + it.candidate.reachableSeconds)
+        }
         return section.copy(
             status = SectionStatus.LOADED,
             picks = picks,
-            note = SectionNote.POPULAR_ONLY.takeIf { reviewsFailed },
+            note = when {
+                budgetLimited -> SectionNote.BUDGET_LIMITED
+                reviewsFailed -> SectionNote.POPULAR_ONLY
+                else -> null
+            },
             failure = null,
         )
     }
@@ -102,8 +117,11 @@ class GetRouteSectionsUseCase(
         return recency to outcomes.any { (_, reviews) -> reviews == null }
     }
 
+    /** Forgets cached reviews; call when a new trip starts. */
+    fun clearTripCache() = reviewCache.clear()
+
     private suspend fun fetchReviewsOrNull(placeId: String): List<Review>? = try {
-        repository.fetchReviews(placeId)
+        reviewCache[placeId] ?: repository.fetchReviews(placeId).also { reviewCache[placeId] = it }
     } catch (cancellation: CancellationException) {
         throw cancellation
     } catch (_: PlacesBudgetExhaustedException) {

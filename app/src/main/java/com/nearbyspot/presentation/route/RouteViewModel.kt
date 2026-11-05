@@ -80,6 +80,7 @@ class RouteViewModel @Inject constructor(
     fun onDestinationSelected(name: String, lat: Double, lng: Double) {
         val generation = invalidateRouteWork()
         repository.beginTrip()
+        getRouteSectionsUseCase.clearTripCache()
         _uiState.update {
             it.copy(
                 destinationName = name,
@@ -89,6 +90,8 @@ class RouteViewModel @Inject constructor(
                 currentRoutePointIndex = 0,
                 sections = emptyList(),
                 expandedSectionIndex = null,
+                horizonSeconds = SectionPlanner.HORIZON_SECONDS,
+                hasMoreSections = false,
                 alongRoutePlaces = emptyList(),
                 highlightedPlaceId = null,
                 selectedPlace = null,
@@ -126,6 +129,7 @@ class RouteViewModel @Inject constructor(
         if (_uiState.value.filterSettings.transportMode == mode) return
         val generation = invalidateRouteWork()
         repository.beginTrip()
+        getRouteSectionsUseCase.clearTripCache()
         _uiState.update {
             it.copy(
                 filterSettings = it.filterSettings.copy(transportMode = mode),
@@ -134,6 +138,8 @@ class RouteViewModel @Inject constructor(
                 currentRoutePointIndex = 0,
                 sections = emptyList(),
                 expandedSectionIndex = null,
+                horizonSeconds = SectionPlanner.HORIZON_SECONDS,
+                hasMoreSections = false,
                 alongRoutePlaces = emptyList(),
                 highlightedPlaceId = null,
                 selectedPlace = null,
@@ -174,6 +180,11 @@ class RouteViewModel @Inject constructor(
     }
 
     fun onRefreshPlaces() {
+        searchAlongRoute(stabilize = true)
+    }
+
+    fun onShowFurther() {
+        _uiState.update { it.copy(horizonSeconds = it.horizonSeconds + SectionPlanner.HORIZON_SECONDS) }
         searchAlongRoute(stabilize = true)
     }
 
@@ -333,27 +344,33 @@ class RouteViewModel @Inject constructor(
         val state = _uiState.value
         val routeInfo = state.routeInfo ?: return
         state.currentPositionOnRoute ?: state.userLatLng ?: return
+        val currentIndex = state.currentRoutePointIndex
         val planned = SectionPlanner.plan(
             routeInfo = routeInfo,
-            currentRouteIndex = state.currentRoutePointIndex,
+            currentRouteIndex = currentIndex,
             speedMetersPerSecond = null,
+            horizonSeconds = state.horizonSeconds,
         )
         if (planned.isEmpty()) return
+        val hasMore = SectionPlanner.plan(routeInfo, currentIndex, null, Int.MAX_VALUE).size > planned.size
         val placeTypes = state.selectedCategories.flatMap { it.placeTypes }.distinct()
         val filters = state.filterSettings
         val generation = ++searchGeneration
         val isRefresh = state.sections.any { it.picks.isNotEmpty() }
         val previousByIndex = state.sections.associateBy { it.index }
+        val expandedIndex = state.expandedSectionIndex
+            ?.takeIf { index -> planned.any { it.index == index } }
         val sections = planned.map { fresh ->
-            val previous = previousByIndex[fresh.index]
-                ?.takeIf { it.picks.isNotEmpty() && (stabilize || fresh.index == 0) }
-            previous?.copy(
-                startRouteIndex = fresh.startRouteIndex,
-                endRouteIndex = fresh.endRouteIndex,
-                aheadSeconds = fresh.aheadSeconds,
-            ) ?: fresh
+            val carried = previousByIndex[fresh.index]
+                ?.takeIf { stabilize || fresh.index == 0 }
+                ?.let { carryOver(it, fresh, currentIndex) }
+            val section = carried ?: fresh
+            if (section.picks.isEmpty() && (fresh.index == 0 || fresh.index == expandedIndex)) {
+                section.copy(status = SectionStatus.LOADING)
+            } else {
+                section
+            }
         }
-        val expandedIndex = state.expandedSectionIndex?.takeIf { index -> sections.any { it.index == index } }
 
         searchJob?.cancel()
         cancelSectionJobs()
@@ -363,6 +380,7 @@ class RouteViewModel @Inject constructor(
             it.copy(
                 sections = sections,
                 expandedSectionIndex = expandedIndex,
+                hasMoreSections = hasMore,
                 alongRoutePlaces = candidatesOf(sections),
                 routeSearchProgress = RouteSearchProgress.Planning,
                 routeSearchFailure = null,
@@ -423,7 +441,8 @@ class RouteViewModel @Inject constructor(
         val shown = sections.firstOrNull { it.index == requested.index }
         val result = when {
             shown != null && shown.picks.isNotEmpty() && loaded.status == SectionStatus.FAILED -> shown
-            shown != null && stabilize && shown.picks.isNotEmpty() -> SectionStability.merge(shown, loaded)
+            shown != null && stabilize && shown.picks.isNotEmpty() ->
+                SectionStability.merge(shown, loaded, currentRoutePointIndex)
             else -> loaded
         }
         return withSection(result)
@@ -436,9 +455,29 @@ class RouteViewModel @Inject constructor(
         return copy(sections = replaced, alongRoutePlaces = candidatesOf(replaced))
     }
 
+    /** Keeps a previously loaded section's picks only while they are still ahead and inside its range. */
+    private fun carryOver(previous: RouteSection, fresh: RouteSection, currentIndex: Int): RouteSection? {
+        val picks = previous.picks.filter {
+            val position = it.candidate.nearestRoutePointIndex
+            position >= currentIndex && position in fresh.startRouteIndex..fresh.endRouteIndex
+        }
+        if (picks.isEmpty()) return null
+        return previous.copy(
+            startRouteIndex = fresh.startRouteIndex,
+            endRouteIndex = fresh.endRouteIndex,
+            aheadSeconds = fresh.aheadSeconds,
+            picks = picks,
+        )
+    }
+
+    /** Places for the map and detail sheet, timed from the traveller rather than from a section start. */
     private fun candidatesOf(sections: List<RouteSection>) = sections
         .flatMap { it.picks }
-        .map { it.candidate }
+        .map { pick ->
+            pick.candidate.copy(
+                reachableSeconds = pick.timeAheadSeconds.takeIf { it > 0 } ?: pick.candidate.reachableSeconds,
+            )
+        }
         .distinctBy { it.place.placeId }
 
     private fun messageFor(failure: RouteSearchFailure): String = when (failure) {
@@ -504,6 +543,6 @@ class RouteViewModel @Inject constructor(
 
     companion object {
         private const val REFRESH_DISTANCE_METERS = 5000.0
-        private const val REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000L
+        private const val REFRESH_MIN_INTERVAL_MS = 10 * 60 * 1000L
     }
 }

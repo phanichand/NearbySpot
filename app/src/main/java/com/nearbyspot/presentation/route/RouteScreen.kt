@@ -619,6 +619,8 @@ fun RouteScreen(
                                 favoriteIds = state.favoriteIds,
                                 listState = timelineListState,
                                 onSectionClick = viewModel::onSectionExpanded,
+                                hasMore = state.hasMoreSections,
+                                onShowFurther = viewModel::onShowFurther,
                                 onPickClick = { viewModel.onPlaceHighlighted(it.place.placeId) },
                                 onToggleFavorite = viewModel::onToggleFavorite,
                                 onNavigate = { place ->

@@ -3,6 +3,7 @@ package com.nearbyspot.domain.usecase
 import com.nearbyspot.domain.model.PickKind
 import com.nearbyspot.domain.model.RouteSection
 import com.nearbyspot.domain.model.SectionPick
+import com.nearbyspot.domain.model.SectionStatus
 
 /** Keeps the picks a traveller is reading from reshuffling on every refresh. */
 object SectionStability {
@@ -11,13 +12,17 @@ object SectionStability {
     /**
      * Returns [fresh] with each pick kind resolved against [shown]: a shown pick stays unless the
      * fresh one beats it by more than [REPLACE_MARGIN] or the shown one is beyond the reach limit.
+     * Picks the traveller has already driven past ([currentRouteIndex]) are never kept, and an empty
+     * fresh section replaces whatever was shown.
      */
-    fun merge(shown: RouteSection, fresh: RouteSection): RouteSection {
-        if (shown.picks.isEmpty()) return fresh
+    fun merge(shown: RouteSection, fresh: RouteSection, currentRouteIndex: Int): RouteSection {
+        if (fresh.status == SectionStatus.NO_QUALIFYING_PLACE) return fresh
+        val stillAhead = shown.picks.filter { it.candidate.nearestRoutePointIndex >= currentRouteIndex }
+        if (stillAhead.isEmpty()) return fresh
         val resolved = PickKind.entries.mapNotNull { kind ->
             resolve(
                 kind = kind,
-                shownPick = shown.picks.firstOrNull { kind in it.kinds },
+                shownPick = stillAhead.firstOrNull { kind in it.kinds },
                 freshPick = fresh.picks.firstOrNull { kind in it.kinds },
             )
         }

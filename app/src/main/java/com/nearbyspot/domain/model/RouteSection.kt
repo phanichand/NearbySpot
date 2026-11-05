@@ -11,6 +11,8 @@ data class SectionPick(
     val extraMinutesVsBaseline: Int,
     val extraStarsVsBaseline: Double,
     val recencySignal: RecencySignal?,
+    /** Time from the traveller to the stop: the section's own lead time plus the reach inside it. */
+    val timeAheadSeconds: Int = 0,
 )
 
 enum class SectionStatus { NOT_LOADED, LOADING, LOADED, NO_QUALIFYING_PLACE, FAILED }

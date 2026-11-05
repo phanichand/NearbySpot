@@ -49,6 +49,8 @@ internal fun RouteTimeline(
     onPickClick: (AlongRoutePlace) -> Unit,
     onToggleFavorite: (Place) -> Unit,
     onNavigate: (Place) -> Unit,
+    hasMore: Boolean,
+    onShowFurther: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -75,6 +77,19 @@ internal fun RouteTimeline(
                         onNavigate = { onNavigate(place) },
                     )
                 }
+            }
+        }
+        if (hasMore) {
+            item(key = "show-further") {
+                Text(
+                    text = stringResource(R.string.route_timeline_show_further),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onShowFurther)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
             }
         }
     }
@@ -203,7 +218,9 @@ private fun PickCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = DurationFormatter.ahead(pick.candidate.reachableSeconds),
+                text = DurationFormatter.ahead(
+                    pick.timeAheadSeconds.takeIf { it > 0 } ?: pick.candidate.reachableSeconds,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

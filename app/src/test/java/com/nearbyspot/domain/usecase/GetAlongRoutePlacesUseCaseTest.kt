@@ -665,6 +665,56 @@ class GetAlongRoutePlacesUseCaseTest {
         assertEquals(false, failure.retryable)
     }
 
+    @Test
+    fun `a budget error with partial results reports that the search was budget limited`() = runTest {
+        val calls = AtomicInteger()
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } coAnswers {
+            if (calls.incrementAndGet() == 1) listOf(place("kept")) else throw PlacesBudgetExhaustedException()
+        }
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 600, 500, 10_000)
+        }
+        var limited = false
+
+        val result = useCase(
+            longRoute(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings(),
+            onBudgetLimited = { limited = true },
+        )
+
+        assertEquals(listOf("kept"), result.map { it.place.placeId })
+        assertTrue(limited)
+    }
+
+    @Test
+    fun `without a budget error the budget limited callback is not called`() = runTest {
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } returns listOf(place("fine"))
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 600, 500, 10_000)
+        }
+        var limited = false
+
+        useCase(longRoute(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings(), onBudgetLimited = { limited = true })
+
+        assertEquals(false, limited)
+    }
+
+    @Test
+    fun `skipping the too close to start rule keeps a stop 5 minutes ahead on a long trip`() = runTest {
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } returns listOf(place("near"))
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 300, 500, 10_000)
+        }
+
+        val withRule = useCase(longRoute(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings())
+        val withoutRule = useCase(
+            longRoute(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings(),
+            skipTooCloseToStart = true,
+        )
+
+        assertTrue(withRule.isEmpty())
+        assertEquals(listOf("near"), withoutRule.map { it.place.placeId })
+    }
+
     private fun matrixFor(
         origins: List<GeoPoint>,
         destinations: List<GeoPoint>,

@@ -7,6 +7,7 @@ import com.nearbyspot.domain.model.Category
 import com.nearbyspot.domain.model.RouteFilterSettings
 import com.nearbyspot.domain.model.RouteInfo
 import com.nearbyspot.domain.model.RouteSection
+import com.nearbyspot.domain.usecase.SectionPlanner
 import com.nearbyspot.domain.model.RouteSearchProgress
 import com.nearbyspot.domain.model.RouteSearchFailure
 
@@ -26,6 +27,8 @@ data class RouteUiState(
     val filterSettings: RouteFilterSettings = RouteFilterSettings(),
     val sections: List<RouteSection> = emptyList(),
     val expandedSectionIndex: Int? = null,
+    val horizonSeconds: Int = SectionPlanner.HORIZON_SECONDS,
+    val hasMoreSections: Boolean = false,
     val alongRoutePlaces: List<AlongRoutePlace> = emptyList(),
     val highlightedPlaceId: String? = null,
     val selectedPlace: AlongRoutePlace? = null,

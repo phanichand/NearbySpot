@@ -64,6 +64,7 @@ class RouteViewModelTest {
         every { repository.observeFavoriteIds() } returns emptyFlow()
         every { repository.beginTrip() } just Runs
         every { repository.endTrip() } just Runs
+        every { getRouteSectionsUseCase.clearTripCache() } just Runs
         every { locationHelper.observeLocation(any()) } returns emptyFlow()
         coEvery { getRouteSectionsUseCase(any(), any(), any(), any()) } coAnswers { loaded(secondArg()) }
 
@@ -406,6 +407,96 @@ class RouteViewModelTest {
 
         val after = viewModel.uiState.value.sections.map { it.index }
         assertEquals(before - 2, after)
+    }
+
+    @Test
+    fun `a shown pick the traveller has driven past is replaced on refresh`() = runTest {
+        grantLocation()
+        val locations = MutableSharedFlow<Location>(extraBufferCapacity = 4)
+        every { locationHelper.observeLocation(any()) } returns locations
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        var searchNumber = 0
+        coEvery { getRouteSectionsUseCase(any(), any(), any(), any()) } coAnswers {
+            searchNumber++
+            val section = secondArg<RouteSection>()
+            if (searchNumber == 1) loadedAt(section, "passed", 0) else loadedAt(section, "ahead", 1)
+        }
+        viewModel.onDestinationSelected("Destination", 10.0, 10.0)
+        advanceUntilIdle()
+        assertEquals(listOf("passed"), placeIds())
+
+        locations.emit(locationAt(10.0, 10.0))
+        runCurrent()
+        viewModel.onRefreshPlaces()
+        advanceUntilIdle()
+
+        assertEquals(listOf("ahead"), placeIds())
+    }
+
+    @Test
+    fun `an expanded section shows as loading during a reload and is not loaded twice`() = runTest {
+        grantLocation()
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        viewModel.onDestinationSelected("Destination", 10.0, 10.0)
+        advanceUntilIdle()
+        viewModel.onSectionExpanded(1)
+        advanceUntilIdle()
+        val gate = CompletableDeferred<Unit>()
+        coEvery { getRouteSectionsUseCase(any(), match { it.index == 1 }, any(), any()) } coAnswers {
+            gate.await()
+            loaded(secondArg(), "later-2")
+        }
+
+        viewModel.onCategoryToggled(com.nearbyspot.domain.model.Category.CAFE)
+        runCurrent()
+        assertEquals(
+            SectionStatus.LOADING,
+            viewModel.uiState.value.sections.first { it.index == 1 }.status,
+        )
+        viewModel.onSectionExpanded(1)
+        runCurrent()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        coVerify(exactly = 2) { getRouteSectionsUseCase(any(), match { it.index == 1 }, any(), any()) }
+    }
+
+    @Test
+    fun `showing further plans more sections and a new destination resets that`() = runTest {
+        grantLocation()
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        viewModel.onDestinationSelected("Destination", 10.0, 10.0)
+        advanceUntilIdle()
+        val initial = viewModel.uiState.value.sections.size
+        assertTrue(viewModel.uiState.value.hasMoreSections)
+
+        viewModel.onShowFurther()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.sections.size > initial)
+
+        viewModel.onDestinationSelected("Other", 20.0, 20.0)
+        advanceUntilIdle()
+        assertEquals(initial, viewModel.uiState.value.sections.size)
+    }
+
+    @Test
+    fun `a new destination clears the trip review cache`() = runTest {
+        grantLocation()
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+
+        viewModel.onDestinationSelected("Destination", 10.0, 10.0)
+        advanceUntilIdle()
+
+        verify(exactly = 1) { getRouteSectionsUseCase.clearTripCache() }
+    }
+
+    private fun loadedAt(section: RouteSection, id: String, routeIndex: Int) = loaded(section, id).let { loaded ->
+        loaded.copy(
+            picks = loaded.picks.map {
+                it.copy(candidate = it.candidate.copy(nearestRoutePointIndex = routeIndex))
+            },
+        )
     }
 
     private fun loadedWithRating(

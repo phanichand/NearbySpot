@@ -111,6 +111,7 @@
         <item quantity="one">%1$d verified stop</item>
         <item quantity="other">%1$d verified stops</item>
     </plurals>
+    <string name="route_timeline_show_further">Show further ahead</string>
     <string name="route_timeline_next_stop">Next stop</string>
     <string name="route_timeline_minutes_in">~%1$d min in</string>
     <string name="route_timeline_hours_in">~%1$dh in</string>
