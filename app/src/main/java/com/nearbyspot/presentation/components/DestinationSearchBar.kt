@@ -1,6 +1,7 @@
 package com.nearbyspot.presentation.components
 
 import androidx.activity.compose.BackHandler
+import android.util.Log
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.libraries.places.api.model.AutocompleteSessionToken
 import com.google.android.libraries.places.api.model.Place
@@ -60,6 +62,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+
+private const val TAG = "DestinationSearch"
+
+/** Exception type and, for Places errors, the status code; never the query or any key. */
+private fun describe(error: Exception): String =
+    "${error.javaClass.simpleName} status=${(error as? ApiException)?.statusCode}"
 
 data class DestinationResult(
     val placeId: String,
@@ -138,7 +146,7 @@ fun DestinationSearchBar(
                     .setQuery(requestQuery)
                     .setSessionToken(sessionToken)
                     .build()
-                val response = placesClient.findAutocompletePredictions(request).await()
+                val response = withTransientRetry { placesClient.findAutocompletePredictions(request).await() }
                 if (!requestGate.isCurrent(requestId) || query != requestQuery || !showSuggestions) {
                     return@launch
                 }
@@ -152,7 +160,8 @@ fun DestinationSearchBar(
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                Log.w(TAG, "Autocomplete failed: ${describe(error)}")
                 if (requestGate.isCurrent(requestId)) {
                     suggestions = emptyList()
                     errorMessage = autocompleteError
@@ -179,7 +188,7 @@ fun DestinationSearchBar(
                 val request = FetchPlaceRequest.builder(suggestion.placeId, fields)
                     .setSessionToken(sessionToken)
                     .build()
-                val response = placesClient.fetchPlace(request).await()
+                val response = withTransientRetry { placesClient.fetchPlace(request).await() }
                 if (!requestGate.isCurrent(requestId)) return@launch
                 @Suppress("DEPRECATION")
                 val latLng = response.place.latLng
@@ -201,7 +210,8 @@ fun DestinationSearchBar(
                 )
             } catch (cancellation: CancellationException) {
                 throw cancellation
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                Log.w(TAG, "Place selection failed: ${describe(error)}")
                 if (requestGate.isCurrent(requestId)) {
                     errorMessage = selectionError
                     retryTarget = RetryTarget.SELECTION
