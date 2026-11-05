@@ -25,8 +25,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -49,7 +47,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,6 +80,7 @@ import com.nearbyspot.domain.model.RouteSearchProgress
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.nearbyspot.R
 import com.nearbyspot.domain.model.AlongRoutePlace
+import com.nearbyspot.domain.model.SectionStatus
 import com.nearbyspot.presentation.components.CategoryChipRow
 import com.nearbyspot.presentation.components.DestinationSearchBar
 import com.nearbyspot.presentation.detail.PlaceDetailSheet
@@ -194,23 +192,13 @@ fun RouteScreen(
         }
     }
 
-    val bubbleListState = rememberLazyListState()
-    // After the user swipes the carousel, highlight the stop that settled into view so the map
-    // follows the card. Ignore programmatic scrolls and stops that are already visible.
-    LaunchedEffect(bubbleListState) {
-        var wasScrolling = false
-        snapshotFlow { bubbleListState.isScrollInProgress }.collect { scrolling ->
-            if (wasScrolling && !scrolling) {
-                val visibleKeys = bubbleListState.layoutInfo.visibleItemsInfo.map { it.key }
-                val current = viewModel.uiState.value
-                val alreadyVisible = current.highlightedPlaceId?.let { it in visibleKeys } == true
-                val target = current.alongRoutePlaces
-                    .getOrNull(bubbleListState.firstVisibleItemIndex)
-                if (!alreadyVisible && target != null) {
-                    viewModel.onPlaceHighlighted(target.place.placeId)
-                }
-            }
-            wasScrolling = scrolling
+    val timelineListState = rememberLazyListState()
+    // When nothing qualifies right now, open the next section so the traveller still sees a pick.
+    LaunchedEffect(state.sections) {
+        val first = state.sections.firstOrNull()
+        val next = state.sections.getOrNull(1)
+        if (first?.status == SectionStatus.NO_QUALIFYING_PLACE && next?.status == SectionStatus.NOT_LOADED) {
+            viewModel.onSectionExpanded(next.index)
         }
     }
     val isDarkTheme = isSystemInDarkTheme()
@@ -320,9 +308,12 @@ fun RouteScreen(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         viewModel.onPlaceHighlighted(arPlace.place.placeId)
-                        val idx = state.alongRoutePlaces.indexOf(arPlace)
-                        if (idx >= 0) {
-                            scope.launch { bubbleListState.animateScrollToItem(idx) }
+                        timelineItemIndex(
+                            state.sections,
+                            state.expandedSectionIndex,
+                            arPlace.place.placeId,
+                        )?.let { idx ->
+                            scope.launch { timelineListState.animateScrollToItem(idx) }
                         }
                         true
                     },
@@ -583,7 +574,7 @@ fun RouteScreen(
                     .fillMaxWidth()
                     .onSizeChanged { bottomOverlayHeightPx = it.height },
             ) {
-                if (state.alongRoutePlaces.isNotEmpty()) {
+                if (state.sections.isNotEmpty()) {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -619,54 +610,24 @@ fun RouteScreen(
                                 )
                             }
                             Spacer(Modifier.height(10.dp))
-                            LazyRow(
-                                state = bubbleListState,
-                                contentPadding = PaddingValues(horizontal = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                itemsIndexed(
-                                    items = state.alongRoutePlaces,
-                                    key = { _, item -> item.place.placeId },
-                                ) { index, arPlace ->
-                                    val fraction = routeStopFraction(
-                                        arPlace.nearestRoutePointIndex,
-                                        activeRouteInfo.decodedPoints.lastIndex,
+                            RouteTimeline(
+                                sections = state.sections,
+                                expandedIndex = state.expandedSectionIndex,
+                                highlightedPlaceId = state.highlightedPlaceId,
+                                favoriteIds = state.favoriteIds,
+                                listState = timelineListState,
+                                onSectionClick = viewModel::onSectionExpanded,
+                                onPickClick = { viewModel.onPlaceHighlighted(it.place.placeId) },
+                                onToggleFavorite = viewModel::onToggleFavorite,
+                                onNavigate = { place ->
+                                    openNavigation(
+                                        context = context,
+                                        latitude = place.latitude,
+                                        longitude = place.longitude,
+                                        tripDestination = state.destinationLatLng,
                                     )
-                                    val zoneLabel = when (routeStopZone(fraction)) {
-                                        RouteStopZone.EARLY ->
-                                            stringResource(R.string.route_zone_early)
-                                        RouteStopZone.MIDDLE ->
-                                            stringResource(R.string.route_zone_middle)
-                                        RouteStopZone.DESTINATION -> stringResource(
-                                            R.string.route_zone_destination,
-                                            state.destinationName.ifBlank { destinationMarkerTitle },
-                                        )
-                                    }
-                                    RouteStopCard(
-                                        arPlace = arPlace,
-                                        rank = index + 1,
-                                        routeFraction = fraction,
-                                        routeZoneLabel = zoneLabel,
-                                        distanceAlongRouteMeters =
-                                            (fraction * activeRouteInfo.distanceMeters).roundToInt(),
-                                        isHighlighted = arPlace.place.placeId ==
-                                            state.highlightedPlaceId,
-                                        isFavorite = state.favoriteIds.contains(arPlace.place.placeId),
-                                        onToggleFavorite = { viewModel.onToggleFavorite(arPlace.place) },
-                                        onNavigate = {
-                                            openNavigation(
-                                                context = context,
-                                                latitude = arPlace.place.latitude,
-                                                longitude = arPlace.place.longitude,
-                                                tripDestination = state.destinationLatLng,
-                                            )
-                                        },
-                                        onClick = {
-                                            viewModel.onPlaceHighlighted(arPlace.place.placeId)
-                                        },
-                                    )
-                                }
-                            }
+                                },
+                            )
                         }
                     }
                 }

@@ -42,7 +42,7 @@
     <string name="retry">Retry</string>
     <string name="back">Back</string>
     <string name="close">Close</string>
-    <string name="route_results_title">Popular across your route</string>
+    <string name="route_results_title">Your drive ahead</string>
     <string name="route_along_route">%1$s along your route</string>
     <string name="route_navigate_to">Navigate to %1$s</string>
     <string name="route_save_stop">Save %1$s</string>
@@ -63,9 +63,9 @@
     <string name="place_type_cafe">Cafe</string>
     <string name="place_type_bakery">Bakery</string>
     <string name="place_type_ice_cream">Ice cream</string>
-    <string name="route_results_subtitle">Top-rated stops, spread along your route</string>
+    <string name="route_results_subtitle">Best stops now, and later along the way</string>
     <string name="route_rank">#%1$d</string>
-    <string name="route_rank_accessibility">Popularity rank %1$d</string>
+    <string name="route_rank_accessibility">Rank %1$d</string>
     <string name="route_zone_early">Early route</string>
     <string name="route_zone_middle">Mid-route</string>
     <string name="route_zone_destination">Near %1$s</string>
@@ -111,6 +111,19 @@
         <item quantity="one">%1$d verified stop</item>
         <item quantity="other">%1$d verified stops</item>
     </plurals>
+    <string name="route_timeline_next_stop">Next stop</string>
+    <string name="route_timeline_hours_in">~%1$dh in</string>
+    <string name="route_timeline_loading">Looking for stops…</string>
+    <string name="route_timeline_empty">Nothing qualifying within 45 minutes</string>
+    <string name="route_timeline_failed">Couldn’t load stops. Tap to retry</string>
+    <string name="route_timeline_tap_to_load">Tap to see picks</string>
+    <string name="route_pick_popular">Popular</string>
+    <string name="route_pick_trending">Trending</string>
+    <string name="route_pick_extra_with_stars">Worth +%1$d min: +%2$s stars</string>
+    <string name="route_pick_extra_time">+%1$d min more than the nearest good option</string>
+    <string name="route_pick_recent">%1$d of %2$d recent reviews are 4+ stars</string>
+    <string name="route_note_budget_limited">Search limit reached. Showing what we found.</string>
+    <string name="route_note_popular_only">Recent reviews unavailable for this stretch.</string>
     <string name="saved_title">Saved places</string>
     <string name="saved_back">Back</string>
     <string name="saved_loading">Loading saved places</string>

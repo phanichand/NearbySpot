@@ -13,6 +13,8 @@ A smart Android app that recommends nearby popular places based on Google Maps r
 - **Along-route discovery**: Plan a route and find verified stops without exceeding the selected detour
 - **Quality threshold**: Route stops require at least 100 Google reviews
 - **Quality-first route results**: Search the full route plus the destination area, rank verified stops by a review-smoothed rating, skip stops right at the start of long trips, and spread results across the route
+- **Look-ahead stops**: The route screen opens on a "Next stop" section (about 15 minutes ahead, never more than 45) followed by hourly sections you can open to plan later stops, such as lunch while you are still at breakfast. Each section offers a "Popular" pick (rating and review count) and a "Trending" pick (recent reviews), and each pick shows what its extra drive buys
+- **Budgeted Places usage**: A trip may use about 200 Places calls and the app caps itself at 900 a month; later sections load only when opened, and Navigate keeps your destination with the stop as a waypoint
 - **Saved places**: Keep favorites available from a dedicated saved screen
 - **Adaptive design**: Responsive Material 3 surfaces with light and dark themes
 
