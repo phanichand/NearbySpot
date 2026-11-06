@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.nearbyspot.R
 import com.nearbyspot.presentation.components.DestinationSearchBar
+import java.time.LocalTime
 import java.util.Date
 
 /** Where the trip starts and when the traveller leaves; both default to "here" and "now". */
@@ -128,7 +129,10 @@ private fun DepartureDialog(
     onLeaveNow: () -> Unit,
     onSet: (hour: Int, minute: Int) -> Unit,
 ) {
+    val now = remember { LocalTime.now() }
     val timeState = rememberTimePickerState(
+        initialHour = now.hour,
+        initialMinute = now.minute,
         is24Hour = DateFormat.is24HourFormat(LocalContext.current),
     )
     AlertDialog(
