@@ -48,6 +48,29 @@ class SectionRankerTest {
     }
 
     @Test
+    fun `a slightly better place 40 minutes out does not beat a good one at 15 minutes`() {
+        val picks = SectionRanker.rank(
+            candidates = listOf(
+                candidate("near-good", 4.2, 15, reviewCount = 300),
+                candidate("far-famous", 4.5, 40, reviewCount = 20_000),
+            ),
+            recency = emptyMap(),
+        )
+
+        assertEquals("near-good", picks.first().candidate.place.placeId)
+    }
+
+    @Test
+    fun `a 4_8 place at 30 minutes still beats a 3_6 place at 10 minutes`() {
+        val picks = SectionRanker.rank(
+            candidates = listOf(candidate("poor-near", 3.6, 10), candidate("great-far", 4.8, 30)),
+            recency = emptyMap(),
+        )
+
+        assertEquals("great-far", picks.first().candidate.place.placeId)
+    }
+
+    @Test
     fun `a candidate at 46 minutes is excluded and one at 45 is kept`() {
         val picks = SectionRanker.rank(
             candidates = listOf(candidate("too-far", 4.9, 46), candidate("limit", 4.0, 45)),
@@ -110,7 +133,7 @@ class SectionRankerTest {
         val picks = SectionRanker.rank(
             candidates = listOf(
                 candidate("nearest", 4.0, 10, reviewCount = 500),
-                candidate("worth-the-wait", 4.5, 32, reviewCount = 500),
+                candidate("worth-the-wait", 4.5, 32, reviewCount = 5_000),
             ),
             recency = emptyMap(),
         )
