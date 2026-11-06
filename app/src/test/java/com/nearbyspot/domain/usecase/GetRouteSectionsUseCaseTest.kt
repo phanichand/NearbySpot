@@ -46,7 +46,7 @@ class GetRouteSectionsUseCaseTest {
     private fun candidates(count: Int) = (1..count).map { alongRoutePlace("p$it", rating = 4.0 + it / 20.0, reachMinutes = 10 + it) }
 
     private fun stubSearch(result: List<com.nearbyspot.domain.model.AlongRoutePlace>) {
-        coEvery { alongRoute.invoke(any(), any(), any(), any(), any(), any(), any(), any()) } returns result
+        coEvery { alongRoute.invoke(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns result
     }
 
     private suspend fun load() = useCase(route, section, listOf("restaurant"), RouteFilterSettings())
@@ -69,9 +69,21 @@ class GetRouteSectionsUseCaseTest {
                 listOf("restaurant"),
                 RouteFilterSettings(),
                 true,
+                false,
                 any(),
                 any(),
             )
+        }
+    }
+
+    @Test
+    fun `only the next stop section searches from the traveller's own position`() = runTest {
+        stubSearch(candidates(2))
+
+        useCase(route, section.copy(index = 0, aheadSeconds = 0), listOf("restaurant"), RouteFilterSettings())
+
+        coVerify {
+            alongRoute.invoke(any(), any(), any(), any(), any(), true, true, any(), any())
         }
     }
 
@@ -118,7 +130,7 @@ class GetRouteSectionsUseCaseTest {
 
     @Test
     fun `a budget failure with nothing found marks the section failed and budget limited`() = runTest {
-        coEvery { alongRoute.invoke(any(), any(), any(), any(), any(), any(), any(), any()) } throws
+        coEvery { alongRoute.invoke(any(), any(), any(), any(), any(), any(), any(), any(), any()) } throws
             RouteSearchException(RouteSearchFailure.TRIP_LIMIT_REACHED, retryable = false)
 
         val loaded = load()
@@ -130,7 +142,7 @@ class GetRouteSectionsUseCaseTest {
 
     @Test
     fun `any other search failure marks the section failed without a note`() = runTest {
-        coEvery { alongRoute.invoke(any(), any(), any(), any(), any(), any(), any(), any()) } throws
+        coEvery { alongRoute.invoke(any(), any(), any(), any(), any(), any(), any(), any(), any()) } throws
             RouteSearchException(RouteSearchFailure.TIMED_OUT)
 
         val loaded = load()
@@ -142,8 +154,8 @@ class GetRouteSectionsUseCaseTest {
 
     @Test
     fun `a partial result after a budget error carries BUDGET_LIMITED`() = runTest {
-        coEvery { alongRoute.invoke(any(), any(), any(), any(), any(), any(), any(), any()) } coAnswers {
-            arg<() -> Unit>(6).invoke()
+        coEvery { alongRoute.invoke(any(), any(), any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+            arg<() -> Unit>(7).invoke()
             candidates(2)
         }
         coEvery { repository.fetchReviews(any()) } returns recentReviews()
@@ -184,7 +196,7 @@ class GetRouteSectionsUseCaseTest {
 
     @Test
     fun `cancellation propagates`() = runTest {
-        coEvery { alongRoute.invoke(any(), any(), any(), any(), any(), any(), any(), any()) } throws
+        coEvery { alongRoute.invoke(any(), any(), any(), any(), any(), any(), any(), any(), any()) } throws
             CancellationException("cancelled")
 
         assertThrows(CancellationException::class.java) { kotlinx.coroutines.runBlocking { load() } }

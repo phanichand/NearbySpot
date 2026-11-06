@@ -715,6 +715,29 @@ class GetAlongRoutePlacesUseCaseTest {
         assertEquals(listOf("near"), withoutRule.map { it.place.placeId })
     }
 
+    @Test
+    fun `searching from the start also looks around the traveller before the first anchor`() = runTest {
+        val searched = mutableListOf<Double>()
+        coEvery { repository.searchNearbyPlaces(any(), any(), any(), any()) } coAnswers {
+            searched += firstArg<Double>()
+            listOf(place("near-${searched.size}"))
+        }
+        coEvery { repository.getRouteMatrix(any(), any(), any()) } coAnswers {
+            matrixFor(firstArg(), secondArg(), 300, 500, 10_000)
+        }
+
+        useCase(longRoute(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings())
+        val withoutStart = searched.toList()
+        searched.clear()
+        useCase(
+            longRoute(), ORIGIN, 0, listOf("restaurant"), RouteFilterSettings(),
+            searchFromStart = true,
+        )
+
+        assertTrue(0.0 !in withoutStart)
+        assertTrue(0.0 in searched)
+    }
+
     private fun matrixFor(
         origins: List<GeoPoint>,
         destinations: List<GeoPoint>,

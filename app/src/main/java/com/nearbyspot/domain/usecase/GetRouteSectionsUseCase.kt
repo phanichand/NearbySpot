@@ -60,6 +60,7 @@ class GetRouteSectionsUseCase(
                 placeTypes = placeTypes,
                 filters = filters,
                 skipTooCloseToStart = true,
+                searchFromStart = section.aheadSeconds == 0,
                 onBudgetLimited = { budgetLimited = true },
             )
         } catch (cancellation: CancellationException) {

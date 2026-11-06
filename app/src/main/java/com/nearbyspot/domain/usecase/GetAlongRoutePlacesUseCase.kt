@@ -37,6 +37,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         placeTypes: List<String>,
         filters: RouteFilterSettings,
         skipTooCloseToStart: Boolean = false,
+        searchFromStart: Boolean = false,
         onBudgetLimited: () -> Unit = {},
         onProgress: (RouteSearchProgress) -> Unit = {},
     ): List<AlongRoutePlace> {
@@ -56,6 +57,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
                     diagnostics = diagnostics,
                     onProgress = onProgress,
                     skipTooCloseToStart = skipTooCloseToStart,
+                    searchFromStart = searchFromStart,
                     onBudgetLimited = onBudgetLimited,
                 )
             } ?: throw RouteSearchException(RouteSearchFailure.TIMED_OUT)
@@ -88,6 +90,7 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
         diagnostics: RouteSearchDiagnostics,
         onProgress: (RouteSearchProgress) -> Unit,
         skipTooCloseToStart: Boolean,
+        searchFromStart: Boolean,
         onBudgetLimited: () -> Unit,
     ): List<AlongRoutePlace> = coroutineScope {
         val budgetSignal = BudgetSignal()
@@ -244,13 +247,19 @@ class GetAlongRoutePlacesUseCase @Inject constructor(
             initialDiscoveries + supplementalDiscoveries + gapDiscoveries
         } else {
             val anchors = diagnostics.measure(RouteSearchDiagnostics.Stage.WAYPOINT_PLANNING) {
-                PolylineUtils.planStableRouteAnchors(
+                val ahead = PolylineUtils.planStableRouteAnchors(
                     points = routeInfo.decodedPoints,
                     currentRouteIndex = currentRouteIndex,
                     intervalMeters = filters.transportMode.anchorIntervalMeters,
                     destinationExclusionMeters = SKIP_NEAR_DESTINATION_METERS,
                     maxAnchors = MAX_SEARCH_ANCHORS,
                 )
+                // Anchors start one interval out, which in city traffic can already be half an hour away.
+                if (searchFromStart && ahead.isNotEmpty()) {
+                    listOf(PolylineUtils.RouteAnchor(currentLatLng, currentRouteIndex)) + ahead
+                } else {
+                    ahead
+                }
             }
 
             if (anchors.isEmpty()) {
