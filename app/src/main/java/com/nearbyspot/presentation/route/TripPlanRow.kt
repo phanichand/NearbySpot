@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.nearbyspot.R
@@ -48,6 +49,7 @@ internal fun TripPlanRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         AssistChip(
+            modifier = Modifier.weight(1f, fill = false),
             onClick = { showOriginDialog = true },
             label = {
                 Text(
@@ -56,6 +58,7 @@ internal fun TripPlanRow(
                         originName.ifBlank { stringResource(R.string.route_origin_current) },
                     ),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             },
         )
@@ -71,6 +74,7 @@ internal fun TripPlanRow(
                             DateFormat.getTimeFormat(context).format(Date(departureTimeMillis)),
                         )
                     },
+                    maxLines = 1,
                 )
             },
         )
