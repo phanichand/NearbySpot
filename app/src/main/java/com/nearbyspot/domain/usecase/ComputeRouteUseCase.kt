@@ -14,7 +14,8 @@ class ComputeRouteUseCase @Inject constructor(
         destLat: Double,
         destLng: Double,
         mode: TransportMode,
+        departureTimeMillis: Long? = null,
     ): RouteInfo {
-        return repository.computeRoute(originLat, originLng, destLat, destLng, mode)
+        return repository.computeRoute(originLat, originLng, destLat, destLng, mode, departureTimeMillis)
     }
 }

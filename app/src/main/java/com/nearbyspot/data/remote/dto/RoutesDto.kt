@@ -55,6 +55,8 @@ data class ComputeRoutesRequest(
     val origin: RouteEndpoint,
     val destination: RouteEndpoint,
     val travelMode: String,
+    val routingPreference: String? = null,
+    val departureTime: String? = null,
 )
 
 data class RouteEndpoint(

@@ -111,6 +111,16 @@
         <item quantity="one">%1$d verified stop</item>
         <item quantity="other">%1$d verified stops</item>
     </plurals>
+    <string name="route_origin_chip">From: %1$s</string>
+    <string name="route_origin_current">My location</string>
+    <string name="route_origin_dialog_title">Start from</string>
+    <string name="route_origin_hint">Where are you starting?</string>
+    <string name="route_origin_use_current">Use my location</string>
+    <string name="route_departure_now">Leave now</string>
+    <string name="route_departure_at">Leave %1$s</string>
+    <string name="route_departure_dialog_title">Leave at</string>
+    <string name="route_departure_set">Set</string>
+    <string name="route_departure_cancel">Cancel</string>
     <string name="route_timeline_show_further">Show further ahead</string>
     <string name="route_timeline_next_stop">Next stop</string>
     <string name="route_timeline_minutes_in">~%1$d min in</string>

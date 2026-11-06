@@ -105,6 +105,17 @@ class RouteViewModel @Inject constructor(
         computeRouteAndSearch(generation)
     }
 
+    fun onOriginSelected(name: String, lat: Double, lng: Double) =
+        restartTrip { it.copy(originName = name, originLatLng = LatLng(lat, lng)) }
+
+    fun onUseCurrentLocation() = restartTrip { it.copy(originName = "", originLatLng = null) }
+
+    /** A time that has already passed means leaving now. */
+    fun onDepartureChanged(departureTimeMillis: Long?) {
+        val upcoming = departureTimeMillis?.takeIf { it > System.currentTimeMillis() }
+        restartTrip { it.copy(departureTimeMillis = upcoming) }
+    }
+
     fun onCategoryToggled(category: Category) {
         _uiState.update {
             val current = it.selectedCategories
@@ -206,6 +217,33 @@ class RouteViewModel @Inject constructor(
         }
     }
 
+    /** Re-plans the whole trip after the start point or departure changed. */
+    private inline fun restartTrip(change: (RouteUiState) -> RouteUiState) {
+        val generation = invalidateRouteWork()
+        repository.beginTrip()
+        getRouteSectionsUseCase.clearTripCache()
+        _uiState.update {
+            change(it).copy(
+                routeInfo = null,
+                currentPositionOnRoute = null,
+                currentRoutePointIndex = 0,
+                sections = emptyList(),
+                expandedSectionIndex = null,
+                horizonSeconds = SectionPlanner.HORIZON_SECONDS,
+                hasMoreSections = false,
+                alongRoutePlaces = emptyList(),
+                highlightedPlaceId = null,
+                selectedPlace = null,
+                isLoadingRoute = false,
+                routeSearchProgress = null,
+                routeSearchFailure = null,
+                isRefreshingPlaces = false,
+                errorMessage = null,
+            )
+        }
+        computeRouteAndSearch(generation)
+    }
+
     private fun fetchLocation() {
         viewModelScope.launch {
             try {
@@ -279,7 +317,8 @@ class RouteViewModel @Inject constructor(
 
     private fun computeRouteAndSearch(generation: Long) {
         val snapshot = _uiState.value
-        val userLatLng = snapshot.userLatLng ?: return
+        val startsElsewhere = snapshot.originLatLng != null
+        val userLatLng = snapshot.originLatLng ?: snapshot.userLatLng ?: return
         val destLatLng = snapshot.destinationLatLng ?: return
         val mode = snapshot.filterSettings.transportMode
 
@@ -297,6 +336,7 @@ class RouteViewModel @Inject constructor(
                     destLat = destLatLng.latitude,
                     destLng = destLatLng.longitude,
                     mode = mode,
+                    departureTimeMillis = snapshot.departureTimeMillis,
                 )
 
                 if (generation != routeGeneration) return@launch
@@ -315,7 +355,8 @@ class RouteViewModel @Inject constructor(
                 }
 
                 if (generation != routeGeneration) return@launch
-                startLiveTracking(generation, routeInfo)
+                // A trip planned from somewhere else has no live position to follow.
+                if (!startsElsewhere) startLiveTracking(generation, routeInfo)
                 searchAlongRoute(expectedRouteGeneration = generation)
             } catch (cancellation: CancellationException) {
                 throw cancellation

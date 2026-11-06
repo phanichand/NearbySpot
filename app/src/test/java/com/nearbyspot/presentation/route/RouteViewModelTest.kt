@@ -86,7 +86,7 @@ class RouteViewModelTest {
         val newRoute = routeTo(20.0, 20.0)
 
         coEvery {
-            computeRouteUseCase(any(), any(), 10.0, 10.0, TransportMode.DRIVE)
+            computeRouteUseCase(any(), any(), 10.0, 10.0, TransportMode.DRIVE, any())
         } coAnswers {
             oldStarted.complete(Unit)
             try {
@@ -98,7 +98,7 @@ class RouteViewModelTest {
             }
         }
         coEvery {
-            computeRouteUseCase(any(), any(), 20.0, 20.0, TransportMode.DRIVE)
+            computeRouteUseCase(any(), any(), 20.0, 20.0, TransportMode.DRIVE, any())
         } returns newRoute
 
         viewModel.onDestinationSelected("Old", 10.0, 10.0)
@@ -124,7 +124,7 @@ class RouteViewModelTest {
         val walkRoute = routeTo(11.0, 11.0)
 
         coEvery {
-            computeRouteUseCase(any(), any(), any(), any(), TransportMode.DRIVE)
+            computeRouteUseCase(any(), any(), any(), any(), TransportMode.DRIVE, any())
         } coAnswers {
             driveStarted.complete(Unit)
             try {
@@ -135,7 +135,7 @@ class RouteViewModelTest {
             }
         }
         coEvery {
-            computeRouteUseCase(any(), any(), any(), any(), TransportMode.WALK)
+            computeRouteUseCase(any(), any(), any(), any(), TransportMode.WALK, any())
         } returns walkRoute
 
         viewModel.onDestinationSelected("Destination", 10.0, 10.0)
@@ -162,7 +162,7 @@ class RouteViewModelTest {
         val refreshStarted = CompletableDeferred<Unit>()
         var searchNumber = 0
 
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns route
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns route
         coEvery { getRouteSectionsUseCase(any(), any(), any(), any()) } coAnswers {
             val section = secondArg<RouteSection>()
             searchNumber++
@@ -208,7 +208,7 @@ class RouteViewModelTest {
         grantLocation()
         var searchNumber = 0
 
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         coEvery { getRouteSectionsUseCase(any(), any(), any(), any()) } coAnswers {
             val section = secondArg<RouteSection>()
             searchNumber++
@@ -235,7 +235,7 @@ class RouteViewModelTest {
     @Test
     fun `initial search failure is distinct from a successful empty result`() = runTest {
         grantLocation()
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         coEvery { getRouteSectionsUseCase(any(), any(), any(), any()) } coAnswers {
             secondArg<RouteSection>().copy(
                 status = SectionStatus.FAILED,
@@ -257,7 +257,7 @@ class RouteViewModelTest {
         grantLocation()
         val locations = MutableSharedFlow<Location>(extraBufferCapacity = 4)
         every { locationHelper.observeLocation(any()) } returns locations
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         val searchStarted = CompletableDeferred<Unit>()
         val searchResult = CompletableDeferred<Unit>()
         coEvery { getRouteSectionsUseCase(any(), any(), any(), any()) } coAnswers {
@@ -284,7 +284,7 @@ class RouteViewModelTest {
     @Test
     fun `selecting a destination loads only the first section`() = runTest {
         grantLocation()
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
 
         viewModel.onDestinationSelected("Destination", 10.0, 10.0)
         advanceUntilIdle()
@@ -300,7 +300,7 @@ class RouteViewModelTest {
     @Test
     fun `expanding a later section loads it once even if tapped twice`() = runTest {
         grantLocation()
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         viewModel.onDestinationSelected("Destination", 10.0, 10.0)
         advanceUntilIdle()
         val release = CompletableDeferred<Unit>()
@@ -324,7 +324,7 @@ class RouteViewModelTest {
     @Test
     fun `changing the destination cancels in flight section loads and starts a new trip`() = runTest {
         grantLocation()
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         viewModel.onDestinationSelected("Old", 10.0, 10.0)
         advanceUntilIdle()
         val started = CompletableDeferred<Unit>()
@@ -354,7 +354,7 @@ class RouteViewModelTest {
     @Test
     fun `changing a category reloads without starting a new trip`() = runTest {
         grantLocation()
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         viewModel.onDestinationSelected("Destination", 10.0, 10.0)
         advanceUntilIdle()
 
@@ -368,7 +368,7 @@ class RouteViewModelTest {
     @Test
     fun `a refresh keeps a shown pick unless the new one clearly beats it`() = runTest {
         grantLocation()
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         var searchNumber = 0
         coEvery { getRouteSectionsUseCase(any(), any(), any(), any()) } coAnswers {
             searchNumber++
@@ -394,7 +394,7 @@ class RouteViewModelTest {
     @Test
     fun `a loaded section with no qualifying place is merged into its neighbour`() = runTest {
         grantLocation()
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         viewModel.onDestinationSelected("Destination", 10.0, 10.0)
         advanceUntilIdle()
         val before = viewModel.uiState.value.sections.map { it.index }
@@ -414,7 +414,7 @@ class RouteViewModelTest {
         grantLocation()
         val locations = MutableSharedFlow<Location>(extraBufferCapacity = 4)
         every { locationHelper.observeLocation(any()) } returns locations
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         var searchNumber = 0
         coEvery { getRouteSectionsUseCase(any(), any(), any(), any()) } coAnswers {
             searchNumber++
@@ -436,7 +436,7 @@ class RouteViewModelTest {
     @Test
     fun `an expanded section shows as loading during a reload and is not loaded twice`() = runTest {
         grantLocation()
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         viewModel.onDestinationSelected("Destination", 10.0, 10.0)
         advanceUntilIdle()
         viewModel.onSectionExpanded(1)
@@ -464,7 +464,7 @@ class RouteViewModelTest {
     @Test
     fun `showing further plans more sections and a new destination resets that`() = runTest {
         grantLocation()
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
         viewModel.onDestinationSelected("Destination", 10.0, 10.0)
         advanceUntilIdle()
         val initial = viewModel.uiState.value.sections.size
@@ -483,7 +483,7 @@ class RouteViewModelTest {
     @Test
     fun `a new destination clears the trip review cache`() = runTest {
         grantLocation()
-        coEvery { computeRouteUseCase(any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
 
         viewModel.onDestinationSelected("Destination", 10.0, 10.0)
         advanceUntilIdle()
@@ -516,6 +516,56 @@ class RouteViewModelTest {
             ),
         ),
     )
+
+    @Test
+    fun `a chosen start point is routed from instead of the current location and is not tracked`() = runTest {
+        grantLocation()
+        val route = routeTo(10.0, 10.0)
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns route
+
+        viewModel.onOriginSelected("Whitefield", 12.97, 77.75)
+        viewModel.onDestinationSelected("Destination", 10.0, 10.0)
+        advanceUntilIdle()
+
+        coVerify { computeRouteUseCase(12.97, 77.75, 10.0, 10.0, TransportMode.DRIVE, null) }
+        verify(exactly = 0) { locationHelper.observeLocation(any()) }
+        assertEquals("Whitefield", viewModel.uiState.value.originName)
+        assertSame(route, viewModel.uiState.value.routeInfo)
+    }
+
+    @Test
+    fun `a departure time is passed to the route and returning to my location clears the start point`() = runTest {
+        grantLocation()
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+
+        viewModel.onDestinationSelected("Destination", 10.0, 10.0)
+        advanceUntilIdle()
+        viewModel.onDepartureChanged(DEPARTURE_MILLIS)
+        advanceUntilIdle()
+
+        coVerify { computeRouteUseCase(ORIGIN.latitude, ORIGIN.longitude, 10.0, 10.0, TransportMode.DRIVE, DEPARTURE_MILLIS) }
+
+        viewModel.onOriginSelected("Whitefield", 12.97, 77.75)
+        advanceUntilIdle()
+        viewModel.onUseCurrentLocation()
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.originLatLng)
+        assertEquals(DEPARTURE_MILLIS, viewModel.uiState.value.departureTimeMillis)
+    }
+
+    @Test
+    fun `a departure time in the past is treated as leaving now`() = runTest {
+        grantLocation()
+        coEvery { computeRouteUseCase(any(), any(), any(), any(), any(), any()) } returns routeTo(10.0, 10.0)
+        viewModel.onDestinationSelected("Destination", 10.0, 10.0)
+        advanceUntilIdle()
+
+        viewModel.onDepartureChanged(1L)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.departureTimeMillis)
+    }
 
     private fun grantLocation() {
         val location = locationAt(ORIGIN.latitude, ORIGIN.longitude)
@@ -576,5 +626,6 @@ class RouteViewModelTest {
 
     private companion object {
         val ORIGIN = LatLng(12.9716, 77.5946)
+        const val DEPARTURE_MILLIS = 4_102_444_800_000L
     }
 }

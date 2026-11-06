@@ -363,6 +363,15 @@ fun RouteScreen(
                 }
             }
 
+            TripPlanRow(
+                placesClient = placesClient,
+                originName = state.originName,
+                departureTimeMillis = state.departureTimeMillis,
+                onOriginSelected = viewModel::onOriginSelected,
+                onUseCurrentLocation = viewModel::onUseCurrentLocation,
+                onDepartureChanged = viewModel::onDepartureChanged,
+            )
+
             CategoryChipRow(
                 selectedCategories = state.selectedCategories,
                 onCategoryToggled = { viewModel.onCategoryToggled(it) },
@@ -614,6 +623,7 @@ fun RouteScreen(
                             Spacer(Modifier.height(10.dp))
                             RouteTimeline(
                                 sections = state.sections,
+                                departureTimeMillis = state.departureTimeMillis,
                                 expandedIndex = state.expandedSectionIndex,
                                 highlightedPlaceId = state.highlightedPlaceId,
                                 favoriteIds = state.favoriteIds,

@@ -20,6 +20,11 @@ data class RouteUiState(
     val routeInfo: RouteInfo? = null,
     val destinationName: String = "",
     val destinationLatLng: LatLng? = null,
+    /** A start point chosen by the traveller; null means their current location. */
+    val originName: String = "",
+    val originLatLng: LatLng? = null,
+    /** When the traveller leaves; null means now. */
+    val departureTimeMillis: Long? = null,
     val userLatLng: LatLng? = null,
     val currentPositionOnRoute: LatLng? = null,
     val currentRoutePointIndex: Int = 0,

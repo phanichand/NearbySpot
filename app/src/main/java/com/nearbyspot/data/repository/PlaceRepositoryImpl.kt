@@ -23,6 +23,7 @@ import com.nearbyspot.domain.model.RouteMatrixEntry
 import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.domain.model.TravelInfo
 import com.nearbyspot.domain.repository.PlaceRepository
+import java.time.Instant
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -83,6 +84,7 @@ class PlaceRepositoryImpl @Inject constructor(
     }
 
     companion object {
+        private const val TRAFFIC_AWARE_PREFERENCE = "TRAFFIC_AWARE"
         private const val CACHE_TTL_MS = 30 * 60 * 1000L // 30 minutes
         private const val STALE_CLEANUP_MS = 24 * 60 * 60 * 1000L // 24 hours
     }
@@ -134,7 +136,10 @@ class PlaceRepositoryImpl @Inject constructor(
         destLat: Double,
         destLng: Double,
         mode: TransportMode,
+        departureTimeMillis: Long?,
     ): RouteInfo {
+        // Traffic-aware timing for a later departure is only offered for driving.
+        val plannedDeparture = departureTimeMillis?.takeIf { mode == TransportMode.DRIVE }
         val request = ComputeRoutesRequest(
             origin = RouteEndpoint(
                 location = WaypointLocation(LatLngDto(originLat, originLng))
@@ -143,6 +148,8 @@ class PlaceRepositoryImpl @Inject constructor(
                 location = WaypointLocation(LatLngDto(destLat, destLng))
             ),
             travelMode = mode.routesApiValue,
+            routingPreference = plannedDeparture?.let { TRAFFIC_AWARE_PREFERENCE },
+            departureTime = plannedDeparture?.let { Instant.ofEpochMilli(it).toString() },
         )
 
         val response = routesApiService.computeRoutes(request = request)

@@ -46,6 +46,7 @@ interface PlaceRepository {
         destLat: Double,
         destLng: Double,
         mode: TransportMode,
+        departureTimeMillis: Long? = null,
     ): RouteInfo
 
     suspend fun fetchReviews(placeId: String): List<com.nearbyspot.domain.model.Review>

@@ -1,6 +1,7 @@
 package com.nearbyspot.presentation.components
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import android.util.Log
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -93,6 +94,7 @@ fun DestinationSearchBar(
     onDestinationSelected: (DestinationResult) -> Unit,
     selectedName: String,
     modifier: Modifier = Modifier,
+    @StringRes hintResId: Int = R.string.destination_search_hint,
 ) {
     var query by remember { mutableStateOf(selectedName) }
     var suggestions by remember { mutableStateOf<List<DestinationSuggestion>>(emptyList()) }
@@ -240,6 +242,7 @@ fun DestinationSearchBar(
     }
 
     DestinationSearchField(
+        hintResId = hintResId,
         query = query,
         suggestions = suggestions,
         expanded = showSuggestions,
@@ -307,6 +310,7 @@ internal fun DestinationSearchField(
     onRetry: () -> Unit,
     onSuggestionSelected: (DestinationSuggestion) -> Unit,
     modifier: Modifier = Modifier,
+    @StringRes hintResId: Int = R.string.destination_search_hint,
 ) {
     val popupVisible = expanded && (isLoading || errorMessage != null || suggestions.isNotEmpty())
     val searchDescription = stringResource(R.string.destination_search_description)
@@ -326,7 +330,7 @@ internal fun DestinationSearchField(
                 .testTag(DESTINATION_SEARCH_FIELD_TAG),
             placeholder = {
                 Text(
-                    stringResource(R.string.destination_search_hint),
+                    stringResource(hintResId),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             },

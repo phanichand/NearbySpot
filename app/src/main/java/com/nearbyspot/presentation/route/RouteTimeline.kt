@@ -20,7 +20,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import android.text.format.DateFormat
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import java.util.Date
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -41,6 +45,7 @@ import com.nearbyspot.presentation.util.DurationFormatter
 @Composable
 internal fun RouteTimeline(
     sections: List<RouteSection>,
+    departureTimeMillis: Long?,
     expandedIndex: Int?,
     highlightedPlaceId: String?,
     favoriteIds: Set<String>,
@@ -60,7 +65,11 @@ internal fun RouteTimeline(
     ) {
         sections.forEach { section ->
             item(key = "section-${section.index}") {
-                SectionHeader(section = section, onClick = { onSectionClick(section.index) })
+                SectionHeader(
+                    section = section,
+                    clockTime = rememberClockTime(departureTimeMillis, section.aheadSeconds),
+                    onClick = { onSectionClick(section.index) },
+                )
             }
             if (isSectionOpen(section, expandedIndex)) {
                 items(
@@ -95,8 +104,19 @@ internal fun RouteTimeline(
     }
 }
 
+/** The wall-clock time the traveller reaches a section, from the chosen departure or from now. */
 @Composable
-private fun SectionHeader(section: RouteSection, onClick: () -> Unit) {
+private fun rememberClockTime(departureTimeMillis: Long?, aheadSeconds: Int): String {
+    val context = LocalContext.current
+    return remember(departureTimeMillis, aheadSeconds) {
+        DateFormat.getTimeFormat(context).format(
+            Date(arrivalClockMillis(departureTimeMillis, System.currentTimeMillis(), aheadSeconds)),
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(section: RouteSection, clockTime: String, onClick: () -> Unit) {
     val title = when (val title = sectionTitle(section.aheadSeconds)) {
         SectionTitle.NextStop -> stringResource(R.string.route_timeline_next_stop)
         is SectionTitle.Ahead -> when {
@@ -128,7 +148,7 @@ private fun SectionHeader(section: RouteSection, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
         Text(
-            text = title,
+            text = "$title · $clockTime",
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.primary,
         )
