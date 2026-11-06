@@ -88,6 +88,7 @@ internal fun RouteSummaryCard(
         modifier = modifier,
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 4.dp,
     ) {
         Row(

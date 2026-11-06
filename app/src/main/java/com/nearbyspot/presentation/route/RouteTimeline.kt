@@ -13,6 +13,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -24,9 +26,11 @@ import android.text.format.DateFormat
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import java.text.NumberFormat
 import java.util.Date
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +72,7 @@ internal fun RouteTimeline(
                 SectionHeader(
                     section = section,
                     clockTime = rememberClockTime(departureTimeMillis, section.aheadSeconds),
+                    isOpen = isSectionOpen(section, expandedIndex),
                     onClick = { onSectionClick(section.index) },
                 )
             }
@@ -116,7 +121,7 @@ private fun rememberClockTime(departureTimeMillis: Long?, aheadSeconds: Int): St
 }
 
 @Composable
-private fun SectionHeader(section: RouteSection, clockTime: String, onClick: () -> Unit) {
+private fun SectionHeader(section: RouteSection, clockTime: String, isOpen: Boolean, onClick: () -> Unit) {
     val title = when (val title = sectionTitle(section.aheadSeconds)) {
         SectionTitle.NextStop -> stringResource(R.string.route_timeline_next_stop)
         is SectionTitle.Ahead -> when {
@@ -141,30 +146,54 @@ private fun SectionHeader(section: RouteSection, clockTime: String, onClick: () 
         SectionNote.POPULAR_ONLY -> stringResource(R.string.route_note_popular_only)
         null -> null
     }
-    Column(
+    val isNextStop = section.aheadSeconds <= 0
+    val canExpand = !isNextStop && section.status != SectionStatus.LOADING
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 12.dp)
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.medium,
+        color = if (isNextStop) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
     ) {
-        Text(
-            text = "$title · $clockTime",
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        status?.let {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
-                text = it,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = clockTime,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
             )
-        }
-        note?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                status?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                note?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (canExpand) {
+                Icon(
+                    imageVector = if (isOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -233,35 +262,47 @@ private fun PickCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = stringResource(R.string.route_rating_and_reviews, reason.rating, reason.reviewCount),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = DurationFormatter.ahead(
-                    pick.timeAheadSeconds.takeIf { it > 0 } ?: pick.candidate.reachableSeconds,
+                text = stringResource(
+                    R.string.route_pick_meta,
+                    reason.rating,
+                    NumberFormat.getIntegerInstance().format(reason.reviewCount),
+                    DurationFormatter.ahead(
+                        pick.timeAheadSeconds.takeIf { it > 0 } ?: pick.candidate.reachableSeconds,
+                    ),
                 ),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            reason.extraMinutes?.let { minutes ->
-                val stars = reason.extraStars
-                Text(
-                    text = if (stars != null && stars > 0.0) {
-                        stringResource(R.string.route_pick_extra_with_stars, minutes, "%.1f".format(stars))
-                    } else {
-                        stringResource(R.string.route_pick_extra_time, minutes)
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-            if (reason.recentPositive != null && reason.recentTotal != null) {
-                Text(
-                    text = stringResource(R.string.route_pick_recent, reason.recentPositive, reason.recentTotal),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Row(
+                modifier = Modifier.padding(top = 6.dp, end = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                reason.extraMinutes?.let { minutes ->
+                    val stars = reason.extraStars
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    ) {
+                        Text(
+                            text = if (stars != null && stars > 0.0) {
+                                stringResource(R.string.route_pick_extra_with_stars, minutes, "%.1f".format(stars))
+                            } else {
+                                stringResource(R.string.route_pick_extra_time, minutes)
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+                if (reason.recentPositive != null && reason.recentTotal != null) {
+                    Text(
+                        text = stringResource(R.string.route_pick_recent, reason.recentPositive, reason.recentTotal),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

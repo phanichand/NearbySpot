@@ -132,9 +132,10 @@
     <string name="route_timeline_tap_to_load">Tap to see picks</string>
     <string name="route_pick_popular">Popular</string>
     <string name="route_pick_trending">Trending</string>
-    <string name="route_pick_extra_with_stars">Worth +%1$d min: +%2$s stars</string>
-    <string name="route_pick_extra_time">+%1$d min more than the nearest good option</string>
-    <string name="route_pick_recent">%1$d of %2$d recent reviews are 4+ stars</string>
+    <string name="route_pick_meta">★ %1$.1f · %2$s reviews · %3$s</string>
+    <string name="route_pick_extra_with_stars">Worth +%1$d min · +%2$s ★</string>
+    <string name="route_pick_extra_time">+%1$d min vs nearest good</string>
+    <string name="route_pick_recent">%1$d/%2$d recent reviews 4★+</string>
     <string name="route_note_budget_limited">Search limit reached. Showing what we found.</string>
     <string name="route_note_popular_only">Recent reviews unavailable for this stretch.</string>
     <string name="saved_title">Saved places</string>
