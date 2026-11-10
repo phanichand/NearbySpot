@@ -63,7 +63,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
@@ -84,6 +83,9 @@ import com.nearbyspot.domain.model.SectionStatus
 import com.nearbyspot.domain.model.TransportMode
 import com.nearbyspot.presentation.components.CategoryChipRow
 import com.nearbyspot.presentation.components.DestinationSearchBar
+import com.nearbyspot.presentation.components.rememberDestinationPinIcon
+import com.nearbyspot.presentation.components.rememberPlacePinIcon
+import com.nearbyspot.presentation.components.rememberWaypointDotIcon
 import com.nearbyspot.presentation.detail.PlaceDetailSheet
 import com.nearbyspot.presentation.util.DurationFormatter
 import kotlinx.coroutines.launch
@@ -268,25 +270,31 @@ fun RouteScreen(
                 }
 
                 if (routeInfo.decodedPoints.isNotEmpty()) {
+                    val startIcon = rememberWaypointDotIcon(filled = false)
+                    val destinationIcon = rememberDestinationPinIcon()
                     Marker(
                         state = MarkerState(position = routeInfo.decodedPoints.first()),
                         title = startMarkerTitle,
-                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN),
+                        icon = startIcon.descriptor,
+                        anchor = startIcon.anchor,
                         zIndex = 2f,
                     )
                     Marker(
                         state = MarkerState(position = routeInfo.decodedPoints.last()),
                         title = state.destinationName.ifBlank { destinationMarkerTitle },
-                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_VIOLET),
+                        icon = destinationIcon.descriptor,
+                        anchor = destinationIcon.anchor,
                         zIndex = 2f,
                     )
                 }
 
                 state.currentPositionOnRoute?.let { pos ->
+                    val positionIcon = rememberWaypointDotIcon(filled = true)
                     Marker(
                         state = MarkerState(position = pos),
                         title = userMarkerTitle,
-                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_CYAN),
+                        icon = positionIcon.descriptor,
+                        anchor = positionIcon.anchor,
                         zIndex = 3f,
                     )
                 }
@@ -294,6 +302,7 @@ fun RouteScreen(
 
             state.alongRoutePlaces.forEach { arPlace ->
                 val isHighlighted = arPlace.place.placeId == state.highlightedPlaceId
+                val pin = rememberPlacePinIcon(highlighted = isHighlighted)
                 Marker(
                     state = MarkerState(
                         position = LatLng(arPlace.place.latitude, arPlace.place.longitude)
@@ -301,11 +310,8 @@ fun RouteScreen(
                     title = arPlace.place.name,
                     snippet = "${DurationFormatter.ahead(arPlace.reachableSeconds)}  \u00B7  " +
                         DurationFormatter.detour(arPlace.detourSeconds),
-                    icon = if (isHighlighted) {
-                        BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
-                    } else {
-                        BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
-                    },
+                    icon = pin.descriptor,
+                    anchor = pin.anchor,
                     zIndex = if (isHighlighted) 1f else 0f,
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -591,7 +597,7 @@ fun RouteScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
                         shape = MaterialTheme.shapes.large,
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        color = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         shadowElevation = 3.dp,
                     ) {

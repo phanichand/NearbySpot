@@ -17,7 +17,6 @@
     <string name="home_plan_route">Plan a route</string>
     <string name="home_view_details">View details</string>
     <string name="home_results_title">Top picks nearby</string>
-    <string name="home_results_subtitle">Tap a card to locate it on the map</string>
     <string name="home_filter_travel_mode">Travel mode</string>
     <string name="home_filter_travel_time">Travel time</string>
     <string name="home_filter_maximum_price">Maximum price</string>
@@ -25,6 +24,22 @@
     <string name="home_filter_availability">Availability</string>
     <string name="home_filter_open_now">Open now</string>
     <string name="home_filter_sort_by">Sort by</string>
+    <string name="place_travel_minutes">%1$d min</string>
+    <string name="place_review_count">(%1$s)</string>
+    <string name="place_open">Open</string>
+    <string name="place_closed">Closed</string>
+    <string name="place_open_now">Open now</string>
+    <string name="place_closed_now">Closed now</string>
+    <string name="place_price_level">Price %1$s</string>
+    <string name="place_minutes_away">%1$d min away</string>
+    <string name="place_rating_and_reviews">%1$.1f · %2$s</string>
+    <string name="place_save">Save place</string>
+    <string name="place_unsave">Remove from saved</string>
+    <string name="place_travel_time">Travel time</string>
+    <string name="place_navigate">Navigate</string>
+    <string name="place_top_reviews">Top reviews</string>
+    <string name="place_photo">Place photo</string>
+    <string name="place_review_rating">Review rating: %1$s</string>
     <string name="place_summary_description">%1$s, %2$.1f stars, %3$d reviews, %4$d minutes away</string>
     <string name="permission_title">Discover what’s nearby</string>
     <string name="permission_body">NearbySpot needs your location to find popular restaurants, cafes, and attractions around you.</string>
@@ -154,7 +169,7 @@
         <item quantity="other">%1$d places ready for later</item>
     </plurals>
     <plurals name="saved_reviews">
-        <item quantity="one">%1$d review</item>
-        <item quantity="other">%1$d reviews</item>
+        <item quantity="one">%1$,d review</item>
+        <item quantity="other">%1$,d reviews</item>
     </plurals>
 </resources>

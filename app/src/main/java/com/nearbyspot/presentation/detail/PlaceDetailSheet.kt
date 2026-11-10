@@ -55,10 +55,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.model.LatLng
+import com.nearbyspot.R
 import com.nearbyspot.domain.model.Place
 import com.nearbyspot.domain.model.RankedPlace
 import com.nearbyspot.domain.model.Review
@@ -85,7 +88,10 @@ fun PlaceDetailSheet(
     PlaceDetailSheet(
         place = rankedPlace.place,
         travelMinutes = rankedPlace.travelInfo.durationMinutes.roundToInt(),
-        travelLabel = "${rankedPlace.travelInfo.durationMinutes.roundToInt()} min away",
+        travelLabel = stringResource(
+            R.string.place_minutes_away,
+            rankedPlace.travelInfo.durationMinutes.roundToInt(),
+        ),
         distanceMeters = rankedPlace.travelInfo.distanceMeters,
         onDismiss = onDismiss,
         photoProvider = photoProvider,
@@ -164,7 +170,9 @@ fun PlaceDetailSheet(
                         ) {
                             Icon(
                                 imageVector = if (isFavorite) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                                contentDescription = if (isFavorite) "Remove from saved" else "Save place",
+                                contentDescription = stringResource(
+                                    if (isFavorite) R.string.place_unsave else R.string.place_save,
+                                ),
                                 tint = if (isFavorite) {
                                     MaterialTheme.colorScheme.onPrimaryContainer
                                 } else {
@@ -184,8 +192,16 @@ fun PlaceDetailSheet(
             ) {
                 RatingBar(rating = place.rating, starSize = 20.dp)
                 Text(
-                    text = "${place.rating} (${place.userRatingCount} reviews)",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = stringResource(
+                        R.string.place_rating_and_reviews,
+                        place.rating,
+                        pluralStringResource(
+                            R.plurals.saved_reviews,
+                            place.userRatingCount,
+                            place.userRatingCount,
+                        ),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -196,7 +212,9 @@ fun PlaceDetailSheet(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     place.isOpen?.let { isOpen ->
                         DetailBadge(
-                            text = if (isOpen) "Open now" else "Closed now",
+                            text = stringResource(
+                                if (isOpen) R.string.place_open_now else R.string.place_closed_now,
+                            ),
                             containerColor = if (isOpen) {
                                 MaterialTheme.colorScheme.primaryContainer
                             } else {
@@ -210,7 +228,7 @@ fun PlaceDetailSheet(
                         )
                     }
                     place.priceLevel?.let {
-                        DetailBadge(text = "Price ${"$".repeat(it)}")
+                        DetailBadge(text = stringResource(R.string.place_price_level, "$".repeat(it)))
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -226,7 +244,7 @@ fun PlaceDetailSheet(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Filled.AccessTime,
-                            contentDescription = "Travel time",
+                            contentDescription = stringResource(R.string.place_travel_time),
                             modifier = Modifier.padding(start = 16.dp).size(22.dp),
                             tint = MaterialTheme.colorScheme.primary,
                         )
@@ -316,7 +334,7 @@ fun PlaceDetailSheet(
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Navigate")
+                Text(stringResource(R.string.place_navigate))
             }
 
             if (reviews.isNotEmpty()) {
@@ -325,9 +343,8 @@ fun PlaceDetailSheet(
                 Spacer(Modifier.height(16.dp))
 
                 Text(
-                    text = "Top Reviews",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = stringResource(R.string.place_top_reviews),
+                    style = MaterialTheme.typography.titleMedium,
                 )
                 Spacer(Modifier.height(8.dp))
 
@@ -389,7 +406,10 @@ private fun ReviewCard(review: Review) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Filled.Star,
-                        contentDescription = "Review rating: ${review.rating}",
+                        contentDescription = stringResource(
+                            R.string.place_review_rating,
+                            review.rating.toString(),
+                        ),
                         modifier = Modifier.size(14.dp),
                         tint = StarYellow,
                     )
@@ -446,7 +466,7 @@ private fun PlaceHeroPhoto(placeId: String, photoProvider: PlacePhotoProvider) {
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .clip(MaterialTheme.shapes.medium),
+                .clip(MaterialTheme.shapes.large),
             contentAlignment = Alignment.Center,
         ) {
             when {
@@ -454,7 +474,7 @@ private fun PlaceHeroPhoto(placeId: String, photoProvider: PlacePhotoProvider) {
                 bitmap != null -> bitmap?.let { bmp ->
                     Image(
                         bitmap = bmp.asImageBitmap(),
-                        contentDescription = "Place photo",
+                        contentDescription = stringResource(R.string.place_photo),
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                     )

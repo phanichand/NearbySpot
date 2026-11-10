@@ -58,6 +58,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -70,14 +71,16 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
@@ -90,8 +93,10 @@ import com.nearbyspot.domain.model.FilterSettings
 import com.nearbyspot.domain.model.RankedPlace
 import com.nearbyspot.presentation.components.CategoryChipRow
 import com.nearbyspot.presentation.components.PlaceBubble
+import com.nearbyspot.presentation.components.rememberPlacePinIcon
 import com.nearbyspot.presentation.detail.PlaceDetailSheet
 import com.nearbyspot.presentation.filter.FilterBar
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @Composable
@@ -186,13 +191,43 @@ fun HomeScreen(
     LaunchedEffect(state.highlightedPlaceId) {
         val highlighted = state.rankedPlaces.find { it.place.placeId == state.highlightedPlaceId }
         if (highlighted != null) {
+            val target = LatLng(highlighted.place.latitude, highlighted.place.longitude)
+            // Never zoom out of a tighter framing; that would stack the pins on each other.
+            val update = if (cameraPositionState.position.zoom >= HIGHLIGHT_MIN_ZOOM) {
+                CameraUpdateFactory.newLatLng(target)
+            } else {
+                CameraUpdateFactory.newLatLngZoom(target, HIGHLIGHT_MIN_ZOOM)
+            }
+            cameraPositionState.animate(update, durationMs = 500)
+        }
+    }
+
+    // Frame the traveller and every pick inside the map area the overlays leave visible.
+    val resultPlaceIds = state.rankedPlaces.map { it.place.placeId }
+    val boundsPaddingPx = with(density) { RESULT_BOUNDS_PADDING.roundToPx() }
+    LaunchedEffect(resultPlaceIds, topOverlayHeightPx, bottomOverlayHeightPx) {
+        if (state.rankedPlaces.isEmpty() || state.highlightedPlaceId != null) return@LaunchedEffect
+        val bounds = LatLngBounds.builder().apply {
+            state.rankedPlaces.forEach { include(LatLng(it.place.latitude, it.place.longitude)) }
+            val lat = state.userLatitude
+            val lng = state.userLongitude
+            if (lat != null && lng != null) {
+                // A minimum span keeps a single close pick from zooming to street level.
+                include(LatLng(lat - MIN_RESULT_BOUNDS_SPAN_DEGREES, lng - MIN_RESULT_BOUNDS_SPAN_DEGREES))
+                include(LatLng(lat + MIN_RESULT_BOUNDS_SPAN_DEGREES, lng + MIN_RESULT_BOUNDS_SPAN_DEGREES))
+            }
+        }.build()
+        // Let the map apply the new content padding before measuring against it.
+        withFrameNanos { }
+        try {
             cameraPositionState.animate(
-                CameraUpdateFactory.newLatLngZoom(
-                    LatLng(highlighted.place.latitude, highlighted.place.longitude),
-                    15f,
-                ),
+                CameraUpdateFactory.newLatLngBounds(bounds, boundsPaddingPx),
                 durationMs = 500,
             )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            // The map has no size yet; the next overlay measurement retries.
         }
     }
 
@@ -237,8 +272,12 @@ fun HomeScreen(
                 viewModel.onPlaceHighlighted(null)
             },
         ) {
-            state.rankedPlaces.forEach { rankedPlace ->
+            state.rankedPlaces.forEachIndexed { index, rankedPlace ->
                 val isHighlighted = rankedPlace.place.placeId == state.highlightedPlaceId
+                val pin = rememberPlacePinIcon(
+                    label = (index + 1).toString(),
+                    highlighted = isHighlighted,
+                )
                 Marker(
                     state = MarkerState(
                         position = LatLng(
@@ -247,22 +286,13 @@ fun HomeScreen(
                         )
                     ),
                     title = rankedPlace.place.name,
-                    snippet = "${rankedPlace.place.rating} - ${
-                        rankedPlace.travelInfo.durationMinutes.toInt()
-                    } min${if (rankedPlace.place.priceLevel != null) " - ${"$".repeat(rankedPlace.place.priceLevel)}" else ""}",
-                    icon = if (isHighlighted) {
-                        BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
-                    } else {
-                        BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
-                    },
+                    icon = pin.descriptor,
+                    anchor = pin.anchor,
                     zIndex = if (isHighlighted) 1f else 0f,
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         viewModel.onPlaceHighlighted(rankedPlace.place.placeId)
-                        val idx = state.rankedPlaces.indexOf(rankedPlace)
-                        if (idx >= 0) {
-                            scope.launch { bubbleListState.animateScrollToItem(idx) }
-                        }
+                        scope.launch { bubbleListState.animateScrollToItem(index) }
                         true
                     },
                 )
@@ -498,84 +528,54 @@ fun HomeScreen(
                 }
             }
 
-        Column(
+        Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .onSizeChanged { bottomOverlayHeightPx = it.height },
+                .onSizeChanged { bottomOverlayHeightPx = it.height }
+                .navigationBarsPadding()
+                .padding(horizontal = 12.dp, vertical = 12.dp)
+                .fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = 6.dp,
         ) {
-            if (state.rankedPlaces.isNotEmpty()) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                    shadowElevation = 3.dp,
-                ) {
-                    Column(modifier = Modifier.padding(vertical = 12.dp)) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column {
-                                Text(
-                                    text = stringResource(R.string.home_results_title),
-                                    style = MaterialTheme.typography.titleSmall,
-                                )
-                                Text(
-                                    text = stringResource(R.string.home_results_subtitle),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Text(
-                                text = "${state.rankedPlaces.size}",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary,
+            Column {
+                if (state.rankedPlaces.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.home_results_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp)
+                            .semantics { heading() },
+                    )
+                    LazyRow(
+                        state = bubbleListState,
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        itemsIndexed(
+                            items = state.rankedPlaces,
+                            key = { _, item -> item.place.placeId },
+                        ) { index, rankedPlace ->
+                            PlaceBubble(
+                                rankedPlace = rankedPlace,
+                                rank = index + 1,
+                                isHighlighted = rankedPlace.place.placeId ==
+                                    state.highlightedPlaceId,
+                                onClick = {
+                                    viewModel.onPlaceHighlighted(rankedPlace.place.placeId)
+                                },
+                                onLongClick = {
+                                    viewModel.onPlaceSelected(rankedPlace)
+                                    showDetail = true
+                                },
                             )
                         }
-                        Spacer(Modifier.height(10.dp))
-                        LazyRow(
-                            state = bubbleListState,
-                            contentPadding = PaddingValues(horizontal = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            itemsIndexed(
-                                items = state.rankedPlaces,
-                                key = { _, item -> item.place.placeId },
-                            ) { index, rankedPlace ->
-                                PlaceBubble(
-                                    rankedPlace = rankedPlace,
-                                    rank = index + 1,
-                                    isHighlighted = rankedPlace.place.placeId ==
-                                        state.highlightedPlaceId,
-                                    onClick = {
-                                        viewModel.onPlaceHighlighted(rankedPlace.place.placeId)
-                                    },
-                                    onLongClick = {
-                                        viewModel.onPlaceSelected(rankedPlace)
-                                        showDetail = true
-                                    },
-                                )
-                            }
-                        }
                     }
+                    Spacer(Modifier.height(4.dp))
                 }
-            }
 
-            Surface(
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .fillMaxWidth(),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                shadowElevation = 6.dp,
-            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -634,6 +634,10 @@ fun HomeScreen(
         )
     }
 }
+
+private val RESULT_BOUNDS_PADDING = 48.dp
+private const val MIN_RESULT_BOUNDS_SPAN_DEGREES = 0.003
+private const val HIGHLIGHT_MIN_ZOOM = 15f
 
 private sealed interface ResultState {
     data object Loading : ResultState
